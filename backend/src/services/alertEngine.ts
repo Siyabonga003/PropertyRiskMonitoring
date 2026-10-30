@@ -1,0 +1,226 @@
+import { HazardType, IncidentSeverity, ArmingState, IncidentStatus } from '@prisma/client';
+import { db } from '../database/db';
+import { DEFAULT_THRESHOLDS } from '../config/constants';
+import { socketEmitter } from '../sockets/emitter';
+import { mqttPublisher } from '../mqtt/publisher';
+import { notificationService } from './notificationService';
+
+export interface TelemetryPayloadMetrics {
+  temperature?: number | null;
+  humidity?: number | null;
+  smoke_ppm?: number | null;
+  water_detected?: boolean;
+  motion_detected?: boolean;
+}
+
+export interface HazardAlertPayload {
+  deviceId: string;
+  timestamp?: number;
+  hazardType: string;
+  severity?: 'INFO' | 'WARNING' | 'CRITICAL';
+  value?: number;
+  unit?: string;
+  message?: string;
+}
+
+export class AlertEngine {
+  /**
+   * Evaluates periodic telemetry readings against safety thresholds and arming state
+   */
+  public async evaluateTelemetry(
+    propertyId: string,
+    zoneId: string,
+    deviceId: string,
+    metrics: TelemetryPayloadMetrics
+  ) {
+    // 1. Fetch zone configuration and property arming state
+    const [zone, property] = await Promise.all([
+      db.getZoneById(zoneId),
+      db.getPropertyById(propertyId),
+    ]);
+
+    const armingState = property?.armingState || ArmingState.DISARMED;
+    const zoneThresholds = (zone?.thresholdConfig as any) || {};
+
+    const maxTemp = zoneThresholds.max_temp ?? DEFAULT_THRESHOLDS.TEMP_MAX_CELSIUS;
+    const minTemp = zoneThresholds.min_temp ?? DEFAULT_THRESHOLDS.TEMP_MIN_CELSIUS;
+    const criticalSmokePpm = zoneThresholds.smoke_ppm_critical ?? DEFAULT_THRESHOLDS.SMOKE_PPM_CRITICAL;
+    const warningSmokePpm = zoneThresholds.smoke_ppm_warning ?? DEFAULT_THRESHOLDS.SMOKE_PPM_WARNING;
+
+    // --- CHECK 1: Smoke PPM (24/7 Critical/Warning Hazard) ---
+    if (metrics.smoke_ppm !== undefined && metrics.smoke_ppm !== null) {
+      if (metrics.smoke_ppm >= criticalSmokePpm) {
+        await this.handleHazardIncident({
+          propertyId,
+          deviceId,
+          hazardType: HazardType.SMOKE,
+          severity: IncidentSeverity.CRITICAL,
+          readingValue: metrics.smoke_ppm,
+          details: `Smoke PPM level (${metrics.smoke_ppm.toFixed(1)} ppm) exceeded critical safety threshold (${criticalSmokePpm} ppm) in ${zone?.name || 'zone'}.`,
+        });
+      } else if (metrics.smoke_ppm >= warningSmokePpm) {
+        await this.handleHazardIncident({
+          propertyId,
+          deviceId,
+          hazardType: HazardType.SMOKE,
+          severity: IncidentSeverity.WARNING,
+          readingValue: metrics.smoke_ppm,
+          details: `Elevated smoke/gas detected (${metrics.smoke_ppm.toFixed(1)} ppm) in ${zone?.name || 'zone'}.`,
+        });
+      }
+    }
+
+    // --- CHECK 2: Water Leak Detected (24/7 Critical Hazard) ---
+    if (metrics.water_detected === true) {
+      await this.handleHazardIncident({
+        propertyId,
+        deviceId,
+        hazardType: HazardType.WATER_LEAK,
+        severity: IncidentSeverity.CRITICAL,
+        readingValue: 1.0,
+        details: `Active water leak detected on probe in ${zone?.name || 'zone'}! High risk of property water damage.`,
+      });
+    }
+
+    // --- CHECK 3: Motion Detected (CONDITIONAL on Arming State) ---
+    if (metrics.motion_detected === true) {
+      if (armingState === ArmingState.ARMED_AWAY) {
+        await this.handleHazardIncident({
+          propertyId,
+          deviceId,
+          hazardType: HazardType.MOTION,
+          severity: IncidentSeverity.CRITICAL,
+          readingValue: 1.0,
+          details: `Intrusion Alert: Motion detected while system is ARMED AWAY in ${zone?.name || 'zone'}.`,
+        });
+      } else if (armingState === ArmingState.ARMED_HOME) {
+        await this.handleHazardIncident({
+          propertyId,
+          deviceId,
+          hazardType: HazardType.MOTION,
+          severity: IncidentSeverity.WARNING,
+          readingValue: 1.0,
+          details: `Perimeter motion detected while system is ARMED HOME in ${zone?.name || 'zone'}.`,
+        });
+      } else {
+        // DISARMED: Motion is logged but DOES NOT create an intrusion incident
+      }
+    }
+
+    // --- CHECK 4: Temperature Extremes (High / Freezing) ---
+    if (metrics.temperature !== undefined && metrics.temperature !== null) {
+      if (metrics.temperature >= maxTemp) {
+        const isFireRisk = metrics.temperature > maxTemp + 15;
+        await this.handleHazardIncident({
+          propertyId,
+          deviceId,
+          hazardType: HazardType.HIGH_TEMP,
+          severity: isFireRisk ? IncidentSeverity.CRITICAL : IncidentSeverity.WARNING,
+          readingValue: metrics.temperature,
+          details: `High temperature anomaly: ${metrics.temperature.toFixed(1)}°C exceeds limit (${maxTemp}°C) in ${zone?.name || 'zone'}.`,
+        });
+      } else if (metrics.temperature <= minTemp) {
+        await this.handleHazardIncident({
+          propertyId,
+          deviceId,
+          hazardType: HazardType.LOW_TEMP,
+          severity: metrics.temperature <= 0 ? IncidentSeverity.CRITICAL : IncidentSeverity.WARNING,
+          readingValue: metrics.temperature,
+          details: `Freezing temperature hazard: ${metrics.temperature.toFixed(1)}°C is below freeze threshold (${minTemp}°C). Pipe burst hazard.`,
+        });
+      }
+    }
+  }
+
+  /**
+   * Evaluates explicit hazard alerts published on the interrupt topic (.../alert)
+   */
+  public async evaluateExplicitAlert(
+    propertyId: string,
+    zoneId: string,
+    deviceId: string,
+    alertPayload: HazardAlertPayload
+  ) {
+    let hazardType: HazardType = HazardType.SMOKE;
+    const rawType = (alertPayload.hazardType || '').toUpperCase();
+
+    if (rawType.includes('WATER') || rawType.includes('LEAK')) {
+      hazardType = HazardType.WATER_LEAK;
+    } else if (rawType.includes('MOTION') || rawType.includes('PIR')) {
+      hazardType = HazardType.MOTION;
+    } else if (rawType.includes('TEMP_HIGH') || rawType.includes('FIRE')) {
+      hazardType = HazardType.HIGH_TEMP;
+    } else if (rawType.includes('TEMP_LOW') || rawType.includes('FREEZE')) {
+      hazardType = HazardType.LOW_TEMP;
+    } else if (rawType.includes('OFFLINE')) {
+      hazardType = HazardType.DEVICE_OFFLINE;
+    }
+
+    let severity: IncidentSeverity = IncidentSeverity.CRITICAL;
+    if (alertPayload.severity === 'WARNING') {
+      severity = IncidentSeverity.WARNING;
+    } else if (alertPayload.severity === 'INFO') {
+      severity = IncidentSeverity.INFO;
+    }
+
+    // Motion alert check with arming state
+    if (hazardType === HazardType.MOTION) {
+      const property = await db.getPropertyById(propertyId);
+      if (property?.armingState === ArmingState.DISARMED) {
+        console.log(`[Alert Engine] Motion interrupt ignored because property is DISARMED.`);
+        return;
+      }
+    }
+
+    await this.handleHazardIncident({
+      propertyId,
+      deviceId,
+      hazardType,
+      severity,
+      readingValue: alertPayload.value,
+      details: alertPayload.message || `Interrupt alert triggered for ${hazardType}`,
+    });
+  }
+
+  /**
+   * Internal deduplication and dispatch handler
+   */
+  private async handleHazardIncident(params: {
+    propertyId: string;
+    deviceId: string;
+    hazardType: HazardType;
+    severity: IncidentSeverity;
+    readingValue?: number | null;
+    details?: string | null;
+  }) {
+    // Check if there is already an ACTIVE incident for this device and hazard type
+    const existing = await db.getActiveIncidentByHazard(params.deviceId, params.hazardType);
+    if (existing) {
+      // Incident is already active/acknowledged, avoid duplicate spam
+      return existing;
+    }
+
+    // 1. Persist new Incident in Database
+    const incident = await db.createIncident(params);
+    console.log(
+      `🔥 [ALERT ENGINE] NEW INCIDENT CREATED: [${incident.severity}] ${incident.hazardType} (ID: ${incident.id}) on device ${incident.deviceId}`
+    );
+
+    // 2. Out-of-band notification
+    const property = await db.getPropertyById(params.propertyId);
+    notificationService.dispatchAlert(incident, property?.name);
+
+    // 3. Emit real-time Socket.IO notification to dashboard rooms
+    socketEmitter.emitNewIncident(params.propertyId, incident);
+
+    // 4. If CRITICAL, trigger audible hardware buzzer via MQTT
+    if (incident.severity === IncidentSeverity.CRITICAL) {
+      console.log(`📢 [ALERT ENGINE] Triggering audible siren on device ${incident.deviceId} via MQTT!`);
+      await mqttPublisher.triggerBuzzer(incident.deviceId, 30000, 'PULSE');
+    }
+
+    return incident;
+  }
+}
+
+export const alertEngine = new AlertEngine();

@@ -1,0 +1,145 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  VIEWER
+}
+
+enum ArmingState {
+  DISARMED
+  ARMED_HOME
+  ARMED_AWAY
+}
+
+enum HazardType {
+  SMOKE
+  WATER_LEAK
+  HIGH_TEMP
+  LOW_TEMP
+  MOTION
+  DEVICE_OFFLINE
+}
+
+enum IncidentSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum IncidentStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         Role          @default(VIEWER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  properties   Property[]    @relation("PropertyMembers")
+  incidentsAck Incident[]    @relation("AcknowledgedBy")
+}
+
+model Property {
+  id          String        @id @default(uuid())
+  name        String
+  address     String?
+  armingState ArmingState   @default(DISARMED)
+  users       User[]        @relation("PropertyMembers")
+  zones       Zone[]
+  incidents   Incident[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Zone {
+  id              String        @id @default(uuid())
+  propertyId      String
+  property        Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name            String        // e.g., "Kitchen", "Server Room", "Basement"
+  devices         Device[]
+  thresholdConfig Json?         // Custom thresholds per zone (e.g. max_temp: 50, smoke_ppm: 300)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Device {
+  id          String        @id // Hardware identifier / MAC address
+  name        String
+  zoneId      String
+  zone        Zone          @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  deviceToken String        @unique // Auth token for MQTT
+  isOnline    Boolean       @default(false)
+  lastSeenAt  DateTime?
+  firmwareVer String?
+  readings    TelemetryReading[]
+  incidents   Incident[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model TelemetryReading {
+  id             BigInt        @id @default(autoincrement())
+  deviceId       String
+  device         Device        @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  recordedAt     DateTime      @default(now())
+  temperature    Float?
+  humidity       Float?
+  smokePpm       Float?
+  waterDetected  Boolean       @default(false)
+  motionDetected Boolean       @default(false)
+  wifiRssi       Int?
+
+  @@index([deviceId, recordedAt(sort: Desc)])
+  @@index([recordedAt(sort: Desc)])
+}
+
+model TelemetryRollup {
+  id           BigInt        @id @default(autoincrement())
+  deviceId     String
+  bucketStart  DateTime      // 1-hour or 1-day bucket
+  avgTemp      Float?
+  minTemp      Float?
+  maxTemp      Float?
+  avgHumidity  Float?
+  avgSmokePpm  Float?
+  maxSmokePpm  Float?
+  waterEvents  Int           @default(0)
+  motionEvents Int           @default(0)
+
+  @@unique([deviceId, bucketStart])
+  @@index([bucketStart(sort: Desc)])
+}
+
+model Incident {
+  id             String           @id @default(uuid())
+  propertyId     String
+  property       Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  deviceId       String
+  device         Device           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  hazardType     HazardType
+  severity       IncidentSeverity
+  status         IncidentStatus   @default(ACTIVE)
+  readingValue   Float?
+  details        String?
+  startedAt      DateTime         @default(now())
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
+  userAck        User?            @relation("AcknowledgedBy", fields: [acknowledgedBy], references: [id])
+  resolvedAt     DateTime?
+
+  @@index([propertyId, status])
+  @@index([startedAt(sort: Desc)])
+}
