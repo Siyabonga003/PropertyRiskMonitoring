@@ -29,6 +29,8 @@ inline const char* severityToString(IncidentSeverity sev) {
 enum HazardType {
     HAZARD_NONE,
     HAZARD_SMOKE,
+    HAZARD_FLAME,
+    HAZARD_GAS_LEAK,
     HAZARD_WATER_LEAK,
     HAZARD_MOTION,
     HAZARD_HIGH_TEMP,
@@ -38,6 +40,8 @@ enum HazardType {
 inline const char* hazardTypeToString(HazardType type) {
     switch (type) {
         case HAZARD_SMOKE:      return "SMOKE_DETECTED";
+        case HAZARD_FLAME:      return "FLAME_DETECTED";
+        case HAZARD_GAS_LEAK:   return "GAS_LEAK";
         case HAZARD_WATER_LEAK: return "WATER_LEAK";
         case HAZARD_MOTION:     return "MOTION_DETECTED";
         case HAZARD_HIGH_TEMP:  return "HIGH_TEMP";
@@ -48,16 +52,20 @@ inline const char* hazardTypeToString(HazardType type) {
 
 // Telemetry Metrics Data Container
 struct SensorMetrics {
-    float temperature;       // In Celsius
-    float humidity;          // In Percentage (0-100)
-    float smoke_ppm;         // Estimated smoke concentration in PPM
-    int   smoke_raw_adc;     // Raw ADC value (0-4095)
-    bool  smoke_digital_alarm; // Digital pin D0 threshold triggered
-    bool  water_detected;    // Digital active-low indicator or analog threshold
-    float water_level_pct;   // Water sensor wetness percentage (0-100)
-    int   water_raw_adc;     // Raw ADC value (0-4095)
-    bool  motion_detected;   // PIR digital state
-    bool  dht_valid;         // Whether DHT sensor reading is valid
+    float temperature;          // In Celsius
+    float humidity;             // In Percentage (0-100)
+    float smoke_ppm;            // Estimated smoke concentration in PPM
+    float gas_ppm;              // Estimated combustible gas / LPG concentration in PPM
+    int   smoke_raw_adc;        // Raw ADC value (0-4095)
+    bool  smoke_digital_alarm;  // Digital pin D0 threshold triggered
+    bool  flame_detected;       // Flame sensor active (digital or analog threshold)
+    float flame_intensity_pct;  // Flame IR intensity percentage (0-100%)
+    int   flame_raw_adc;        // Flame sensor raw ADC
+    bool  water_detected;       // Digital active-low indicator or analog threshold
+    float water_level_pct;      // Water sensor wetness percentage (0-100)
+    int   water_raw_adc;        // Raw ADC value (0-4095)
+    bool  motion_detected;      // PIR digital state
+    bool  dht_valid;            // Whether DHT sensor reading is valid
 };
 
 // System Health and Diagnostics
@@ -83,6 +91,8 @@ struct AlertEvent {
 // Buzzer Cadence Patterns
 enum BuzzerPattern {
     BUZZER_IDLE,          // Silence
+    BUZZER_PATTERN_FLAME, // Ultra-fast urgent strobe (60ms ON / 60ms OFF)
+    BUZZER_PATTERN_GAS,   // Heavy syncopated warning (200ms ON / 100ms OFF)
     BUZZER_PATTERN_SMOKE, // Rapid urgent pulsing (100ms ON / 100ms OFF)
     BUZZER_PATTERN_WATER, // Heavy alert tone (500ms ON / 200ms OFF)
     BUZZER_PATTERN_MOTION,// Quick alert double-chirp

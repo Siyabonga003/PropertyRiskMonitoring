@@ -14,6 +14,8 @@ const ingestTelemetrySchema = z.object({
     temperature: z.number().optional(),
     humidity: z.number().optional(),
     smoke_ppm: z.number().optional(),
+    gas_ppm: z.number().optional(),
+    flame_detected: z.boolean().optional(),
     water_detected: z.boolean().optional(),
     motion_detected: z.boolean().optional(),
   }),

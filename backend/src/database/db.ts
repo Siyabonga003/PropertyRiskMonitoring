@@ -242,6 +242,8 @@ export class DatabaseAdapter {
     temperature?: number | null;
     humidity?: number | null;
     smokePpm?: number | null;
+    gasPpm?: number | null;
+    flameDetected?: boolean;
     waterDetected?: boolean;
     motionDetected?: boolean;
     wifiRssi?: number | null;
@@ -255,6 +257,8 @@ export class DatabaseAdapter {
             temperature: reading.temperature ?? null,
             humidity: reading.humidity ?? null,
             smokePpm: reading.smokePpm ?? null,
+            gasPpm: reading.gasPpm ?? null,
+            flameDetected: reading.flameDetected || false,
             waterDetected: reading.waterDetected || false,
             motionDetected: reading.motionDetected || false,
             wifiRssi: reading.wifiRssi ?? null,
@@ -267,6 +271,8 @@ export class DatabaseAdapter {
           temperature: row.temperature,
           humidity: row.humidity,
           smokePpm: row.smokePpm,
+          gasPpm: row.gasPpm,
+          flameDetected: row.flameDetected,
           waterDetected: row.waterDetected,
           motionDetected: row.motionDetected,
           wifiRssi: row.wifiRssi,
@@ -281,6 +287,8 @@ export class DatabaseAdapter {
       temperature: reading.temperature ?? null,
       humidity: reading.humidity ?? null,
       smokePpm: reading.smokePpm ?? null,
+      gasPpm: reading.gasPpm ?? null,
+      flameDetected: reading.flameDetected || false,
       waterDetected: reading.waterDetected || false,
       motionDetected: reading.motionDetected || false,
       wifiRssi: reading.wifiRssi ?? null,
@@ -302,6 +310,8 @@ export class DatabaseAdapter {
             temperature: row.temperature,
             humidity: row.humidity,
             smokePpm: row.smokePpm,
+            gasPpm: row.gasPpm,
+            flameDetected: row.flameDetected,
             waterDetected: row.waterDetected,
             motionDetected: row.motionDetected,
             wifiRssi: row.wifiRssi,
@@ -329,6 +339,8 @@ export class DatabaseAdapter {
           temperature: r.temperature,
           humidity: r.humidity,
           smokePpm: r.smokePpm,
+          gasPpm: r.gasPpm,
+          flameDetected: r.flameDetected,
           waterDetected: r.waterDetected,
           motionDetected: r.motionDetected,
           wifiRssi: r.wifiRssi,
@@ -359,6 +371,9 @@ export class DatabaseAdapter {
           avgHumidity: r.avgHumidity,
           avgSmokePpm: r.avgSmokePpm,
           maxSmokePpm: r.maxSmokePpm,
+          avgGasPpm: r.avgGasPpm,
+          maxGasPpm: r.maxGasPpm,
+          flameEvents: r.flameEvents,
           waterEvents: r.waterEvents,
           motionEvents: r.motionEvents,
         }));
@@ -386,6 +401,9 @@ export class DatabaseAdapter {
             avgHumidity: rollup.avgHumidity,
             avgSmokePpm: rollup.avgSmokePpm,
             maxSmokePpm: rollup.maxSmokePpm,
+            avgGasPpm: rollup.avgGasPpm,
+            maxGasPpm: rollup.maxGasPpm,
+            flameEvents: rollup.flameEvents,
             waterEvents: rollup.waterEvents,
             motionEvents: rollup.motionEvents,
           },
@@ -398,6 +416,9 @@ export class DatabaseAdapter {
             avgHumidity: rollup.avgHumidity,
             avgSmokePpm: rollup.avgSmokePpm,
             maxSmokePpm: rollup.maxSmokePpm,
+            avgGasPpm: rollup.avgGasPpm,
+            maxGasPpm: rollup.maxGasPpm,
+            flameEvents: rollup.flameEvents,
             waterEvents: rollup.waterEvents,
             motionEvents: rollup.motionEvents,
           },
@@ -412,6 +433,9 @@ export class DatabaseAdapter {
           avgHumidity: row.avgHumidity,
           avgSmokePpm: row.avgSmokePpm,
           maxSmokePpm: row.maxSmokePpm,
+          avgGasPpm: row.avgGasPpm,
+          maxGasPpm: row.maxGasPpm,
+          flameEvents: row.flameEvents,
           waterEvents: row.waterEvents,
           motionEvents: row.motionEvents,
         };

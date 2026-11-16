@@ -20,6 +20,7 @@
 #include "types.h"
 #include "dht_sensor.h"
 #include "smoke_sensor.h"
+#include "flame_sensor.h"
 #include "water_sensor.h"
 #include "motion_sensor.h"
 #include "buzzer.h"
@@ -41,6 +42,9 @@ static volatile unsigned long s_motionInterruptTime = 0;
 static volatile bool s_smokeInterruptFlag = false;
 static volatile unsigned long s_smokeInterruptTime = 0;
 
+static volatile bool s_flameInterruptFlag = false;
+static volatile unsigned long s_flameInterruptTime = 0;
+
 // Runtime state & timers
 static uint32_t s_telemetryIntervalMs = TELEMETRY_INTERVAL_MS;
 static unsigned long s_lastTelemetryTime = 0;
@@ -49,12 +53,21 @@ static unsigned long s_lastSensorSampleTime = 0;
 // Alert debounce timestamps to prevent alert flooding
 static unsigned long s_lastWaterAlertTime = 0;
 static unsigned long s_lastSmokeAlertTime = 0;
+static unsigned long s_lastGasAlertTime = 0;
+static unsigned long s_lastFlameAlertTime = 0;
 static unsigned long s_lastMotionAlertTime = 0;
 static unsigned long s_lastTempAlertTime = 0;
 
 // ============================================================================
 // Hardware Interrupt Service Routines (IRAM_ATTR)
 // ============================================================================
+
+void IRAM_ATTR isrFlameDetected() {
+    portENTER_CRITICAL_ISR(&isrMux);
+    s_flameInterruptFlag = true;
+    s_flameInterruptTime = millis();
+    portEXIT_CRITICAL_ISR(&isrMux);
+}
 
 void IRAM_ATTR isrWaterLeak() {
     portENTER_CRITICAL_ISR(&isrMux);
@@ -111,10 +124,14 @@ void setup() {
     // Initialize modular sensor drivers
     dhtSensor.begin();
     smokeSensor.begin();
+    flameSensor.begin();
     waterSensor.begin();
     motionSensor.begin();
 
     // Configure and attach Hardware Interrupts
+    // Optical flame sensor D0 is active LOW (falling edge when IR flame sensed)
+    attachInterrupt(digitalPinToInterrupt(PIN_FLAME_DIGITAL), isrFlameDetected, FALLING);
+
     // Water probe D0 is active LOW (falling edge when submerged)
     attachInterrupt(digitalPinToInterrupt(PIN_WATER_DIGITAL), isrWaterLeak, FALLING);
 
@@ -124,7 +141,7 @@ void setup() {
     // MQ-2 digital comparator D0 is active LOW on threshold breach
     attachInterrupt(digitalPinToInterrupt(PIN_SMOKE_DIGITAL), isrSmokeThreshold, FALLING);
 
-    Serial.println("[ISR] Hardware interrupts attached for Water, PIR, and Smoke pins.");
+    Serial.println("[ISR] Hardware interrupts attached for Flame, Water, PIR, and Smoke pins.");
 
     // Initialize Network Managers
     wifiManager.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -169,10 +186,16 @@ void loop() {
         // Sample DHT22
         metrics.dht_valid = dhtSensor.read(metrics.temperature, metrics.humidity);
 
-        // Sample MQ-2 Smoke
-        metrics.smoke_ppm = smokeSensor.readPPM();
+        // Sample MQ-2 Dual Gas (Smoke and Combustible Gas/LPG)
+        metrics.smoke_ppm = smokeSensor.readSmokePPM();
+        metrics.gas_ppm = smokeSensor.readGasPPM();
         metrics.smoke_raw_adc = smokeSensor.readRawADC(5);
         metrics.smoke_digital_alarm = smokeSensor.isDigitalAlarmActive();
+
+        // Sample Optical Flame Sensor
+        metrics.flame_detected = flameSensor.isFlameDetected(FLAME_THRESHOLD_PCT);
+        metrics.flame_intensity_pct = flameSensor.readIntensityPct();
+        metrics.flame_raw_adc = flameSensor.getCachedRaw();
 
         // Sample Water Leak
         metrics.water_raw_adc = waterSensor.readRawADC(5);
@@ -186,9 +209,13 @@ void loop() {
         metrics.temperature = dhtSensor.getTemperature();
         metrics.humidity = dhtSensor.getHumidity();
         metrics.dht_valid = dhtSensor.isValid();
-        metrics.smoke_ppm = smokeSensor.readPPM();
+        metrics.smoke_ppm = smokeSensor.getCachedSmokePpm();
+        metrics.gas_ppm = smokeSensor.getCachedGasPpm();
         metrics.smoke_raw_adc = smokeSensor.readRawADC(2);
         metrics.smoke_digital_alarm = smokeSensor.isDigitalAlarmActive();
+        metrics.flame_detected = flameSensor.getCachedDigital() || (flameSensor.getCachedIntensity() >= FLAME_THRESHOLD_PCT);
+        metrics.flame_intensity_pct = flameSensor.getCachedIntensity();
+        metrics.flame_raw_adc = flameSensor.getCachedRaw();
         metrics.water_raw_adc = waterSensor.readRawADC(2);
         metrics.water_level_pct = waterSensor.readWetnessPct();
         metrics.water_detected = waterSensor.isWaterDetected(WATER_THRESHOLD_PCT);
@@ -219,8 +246,13 @@ void handleHazardAlerts(const SensorMetrics &metrics) {
     bool waterFlag = false;
     bool motionFlag = false;
     bool smokeFlag = false;
+    bool flameFlag = false;
 
     portENTER_CRITICAL(&isrMux);
+    if (s_flameInterruptFlag) {
+        flameFlag = true;
+        s_flameInterruptFlag = false;
+    }
     if (s_waterInterruptFlag) {
         waterFlag = true;
         s_waterInterruptFlag = false;
@@ -236,7 +268,53 @@ void handleHazardAlerts(const SensorMetrics &metrics) {
     portEXIT_CRITICAL(&isrMux);
 
     // ------------------------------------------------------------------------
-    // A. WATER LEAK HAZARD (CRITICAL - 24/7 Priority)
+    // 1. OPTICAL FLAME HAZARD (CRITICAL - 24/7 Highest Priority)
+    // ------------------------------------------------------------------------
+    bool flameActive = flameFlag || metrics.flame_detected || flameSensor.isDigitalActive();
+    if (flameActive && (now - s_lastFlameAlertTime >= SENSOR_DEBOUNCE_TIME_MS)) {
+        s_lastFlameAlertTime = now;
+        Serial.printf("\n[ALERT] *** CRITICAL: ACTIVE FLAME / FIRE DETECTED (%.1f%% IR)! ***\n",
+                      metrics.flame_intensity_pct);
+
+        // Sound rapid high-priority fire siren & flash alarm strobe
+        buzzer.trigger(BUZZER_PATTERN_FLAME, 30000);
+        statusLed.setMode(LED_MODE_ALARM);
+
+        AlertEvent alert = {
+            .hazard = HAZARD_FLAME,
+            .severity = SEV_CRITICAL,
+            .value = metrics.flame_intensity_pct,
+            .unit = "%",
+            .message = "CRITICAL: Open flame or fire source detected!",
+            .timestamp = wifiManager.getEpochTime()
+        };
+        dispatchHazardAlert(alert);
+    }
+
+    // ------------------------------------------------------------------------
+    // 2. COMBUSTIBLE GAS / LPG LEAK HAZARD (CRITICAL - 24/7 Priority)
+    // ------------------------------------------------------------------------
+    bool gasActive = (metrics.gas_ppm >= GAS_THRESHOLD_PPM);
+    if (gasActive && (now - s_lastGasAlertTime >= SENSOR_DEBOUNCE_TIME_MS)) {
+        s_lastGasAlertTime = now;
+        Serial.printf("\n[ALERT] *** CRITICAL: COMBUSTIBLE GAS / LPG LEAK (%.1f PPM)! ***\n", metrics.gas_ppm);
+
+        buzzer.trigger(BUZZER_PATTERN_GAS, 30000);
+        statusLed.setMode(LED_MODE_ALARM);
+
+        AlertEvent alert = {
+            .hazard = HAZARD_GAS_LEAK,
+            .severity = SEV_CRITICAL,
+            .value = metrics.gas_ppm,
+            .unit = "ppm",
+            .message = "Dangerous combustible gas (LPG/Methane) leak concentration detected!",
+            .timestamp = wifiManager.getEpochTime()
+        };
+        dispatchHazardAlert(alert);
+    }
+
+    // ------------------------------------------------------------------------
+    // 3. WATER LEAK HAZARD (CRITICAL - 24/7 Priority)
     // ------------------------------------------------------------------------
     bool waterActive = waterFlag || metrics.water_detected || waterSensor.isDigitalActive();
     if (waterActive && (now - s_lastWaterAlertTime >= SENSOR_DEBOUNCE_TIME_MS)) {
@@ -377,8 +455,10 @@ void sendTelemetry(const SensorMetrics &metrics) {
         .mqtt_connected = mqttManager.isConnected()
     };
 
-    Serial.printf("[Telemetry] Temp: %.1f C | Hum: %.1f%% | Smoke: %.1f ppm | Water: %s | Motion: %s | FreeHeap: %u B\n",
+    Serial.printf("[Telemetry] Temp: %.1f C | Hum: %.1f%% | Smoke: %.1f ppm | Gas: %.1f ppm | Flame: %s | Water: %s | Motion: %s | FreeHeap: %u B\n",
                   metrics.temperature, metrics.humidity, metrics.smoke_ppm,
+                  metrics.gas_ppm,
+                  metrics.flame_detected ? "FIRE!" : "Safe",
                   metrics.water_detected ? "YES" : "NO",
                   metrics.motion_detected ? "YES" : "NO",
                   diag.free_heap);

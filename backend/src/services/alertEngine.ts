@@ -9,6 +9,8 @@ export interface TelemetryPayloadMetrics {
   temperature?: number | null;
   humidity?: number | null;
   smoke_ppm?: number | null;
+  gas_ppm?: number | null;
+  flame_detected?: boolean;
   water_detected?: boolean;
   motion_detected?: boolean;
 }
@@ -46,8 +48,45 @@ export class AlertEngine {
     const minTemp = zoneThresholds.min_temp ?? DEFAULT_THRESHOLDS.TEMP_MIN_CELSIUS;
     const criticalSmokePpm = zoneThresholds.smoke_ppm_critical ?? DEFAULT_THRESHOLDS.SMOKE_PPM_CRITICAL;
     const warningSmokePpm = zoneThresholds.smoke_ppm_warning ?? DEFAULT_THRESHOLDS.SMOKE_PPM_WARNING;
+    const criticalGasPpm = zoneThresholds.gas_ppm_critical ?? DEFAULT_THRESHOLDS.GAS_PPM_CRITICAL;
+    const warningGasPpm = zoneThresholds.gas_ppm_warning ?? DEFAULT_THRESHOLDS.GAS_PPM_WARNING;
 
-    // --- CHECK 1: Smoke PPM (24/7 Critical/Warning Hazard) ---
+    // --- CHECK 1: Optical Flame Detection (24/7 Immediate Critical Fire Hazard) ---
+    if (metrics.flame_detected === true) {
+      await this.handleHazardIncident({
+        propertyId,
+        deviceId,
+        hazardType: HazardType.FLAME,
+        severity: IncidentSeverity.CRITICAL,
+        readingValue: 1.0,
+        details: `Active open flame / fire detected in ${zone?.name || 'zone'}! Immediate fire suppression & evacuation priority.`,
+      });
+    }
+
+    // --- CHECK 2: Combustible Gas / LPG Concentration (24/7 Priority) ---
+    if (metrics.gas_ppm !== undefined && metrics.gas_ppm !== null) {
+      if (metrics.gas_ppm >= criticalGasPpm) {
+        await this.handleHazardIncident({
+          propertyId,
+          deviceId,
+          hazardType: HazardType.GAS_LEAK,
+          severity: IncidentSeverity.CRITICAL,
+          readingValue: metrics.gas_ppm,
+          details: `Combustible gas concentration (${metrics.gas_ppm.toFixed(1)} ppm) exceeded critical safety threshold (${criticalGasPpm} ppm) in ${zone?.name || 'zone'}. Explosion risk!`,
+        });
+      } else if (metrics.gas_ppm >= warningGasPpm) {
+        await this.handleHazardIncident({
+          propertyId,
+          deviceId,
+          hazardType: HazardType.GAS_LEAK,
+          severity: IncidentSeverity.WARNING,
+          readingValue: metrics.gas_ppm,
+          details: `Elevated combustible gas / LPG detected (${metrics.gas_ppm.toFixed(1)} ppm) in ${zone?.name || 'zone'}.`,
+        });
+      }
+    }
+
+    // --- CHECK 3: Smoke PPM (24/7 Critical/Warning Hazard) ---
     if (metrics.smoke_ppm !== undefined && metrics.smoke_ppm !== null) {
       if (metrics.smoke_ppm >= criticalSmokePpm) {
         await this.handleHazardIncident({
@@ -70,7 +109,7 @@ export class AlertEngine {
       }
     }
 
-    // --- CHECK 2: Water Leak Detected (24/7 Critical Hazard) ---
+    // --- CHECK 4: Water Leak Detected (24/7 Critical Hazard) ---
     if (metrics.water_detected === true) {
       await this.handleHazardIncident({
         propertyId,
@@ -144,11 +183,15 @@ export class AlertEngine {
     let hazardType: HazardType = HazardType.SMOKE;
     const rawType = (alertPayload.hazardType || '').toUpperCase();
 
-    if (rawType.includes('WATER') || rawType.includes('LEAK')) {
+    if (rawType.includes('FLAME') || rawType.includes('FIRE')) {
+      hazardType = HazardType.FLAME;
+    } else if (rawType.includes('GAS') || rawType.includes('LPG')) {
+      hazardType = HazardType.GAS_LEAK;
+    } else if (rawType.includes('WATER') || rawType.includes('LEAK')) {
       hazardType = HazardType.WATER_LEAK;
     } else if (rawType.includes('MOTION') || rawType.includes('PIR')) {
       hazardType = HazardType.MOTION;
-    } else if (rawType.includes('TEMP_HIGH') || rawType.includes('FIRE')) {
+    } else if (rawType.includes('TEMP_HIGH')) {
       hazardType = HazardType.HIGH_TEMP;
     } else if (rawType.includes('TEMP_LOW') || rawType.includes('FREEZE')) {
       hazardType = HazardType.LOW_TEMP;

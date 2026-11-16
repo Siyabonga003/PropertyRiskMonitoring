@@ -13,21 +13,25 @@
  * 1. DHT22 (AM2302) Temperature & Humidity Sensor:
  *    - Data Pin: GPIO 4 (Digital In/Out, with 4.7k-10k pullup resistor recommended)
  * 
- * 2. MQ-2 Flammable Gas & Smoke Sensor:
+ * 2. MQ-2 Flammable Gas & Smoke Dual Sensor:
  *    - Analog Pin (A0): GPIO 34 (ADC1_CHANNEL_6, Input-only, safe with Wi-Fi)
  *    - Digital Pin (D0): GPIO 25 (Digital In with comparator threshold, Active LOW/HIGH)
  * 
- * 3. Water Leak / Rain Sensor:
+ * 3. Optical Flame Sensor (KY-026 / 760-1100nm IR Fire Detector):
+ *    - Analog Pin (A0): GPIO 32 (ADC1_CHANNEL_4, Input-only, safe with Wi-Fi)
+ *    - Digital Pin (D0): GPIO 14 (Digital In with comparator threshold, Active LOW on flame)
+ * 
+ * 4. Water Leak / Rain Sensor:
  *    - Analog Pin (A0): GPIO 35 (ADC1_CHANNEL_7, Input-only, safe with Wi-Fi)
  *    - Digital Pin (D0): GPIO 26 (Digital In, Active LOW when water bridges probe)
  * 
- * 4. PIR Motion Sensor (HC-SR501 / AM312):
+ * 5. PIR Motion Sensor (HC-SR501 / AM312):
  *    - Digital Out: GPIO 27 (Digital In, Active HIGH on movement detected)
  * 
- * 5. Active Piezo Buzzer:
+ * 6. Active Piezo Buzzer:
  *    - Control Pin: GPIO 19 (Digital Out, HIGH = Beep, LOW = Silent)
  * 
- * 6. Status LED:
+ * 7. Status LED:
  *    - Control Pin: GPIO 2 (Onboard Blue LED on ESP32 DevKit V1, Active HIGH)
  * ============================================================================
  */
@@ -35,9 +39,13 @@
 // DHT22 Pin
 #define PIN_DHT_DATA           4
 
-// MQ-2 Smoke & Gas Sensor Pins
+// MQ-2 Smoke & Flammable Gas Dual Sensor Pins
 #define PIN_SMOKE_ANALOG       34
 #define PIN_SMOKE_DIGITAL      25
+
+// Optical Flame Sensor Pins
+#define PIN_FLAME_ANALOG       32
+#define PIN_FLAME_DIGITAL      14
 
 // Water Leak Detector Pins
 #define PIN_WATER_ANALOG       35

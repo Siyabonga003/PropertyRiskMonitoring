@@ -43,6 +43,8 @@ bool FallbackHttpClient::postTelemetry(const SensorMetrics &metrics, const Syste
         metricsObj["humidity"] = nullptr;
     }
     metricsObj["smoke_ppm"] = metrics.smoke_ppm;
+    metricsObj["gas_ppm"] = metrics.gas_ppm;
+    metricsObj["flame_detected"] = metrics.flame_detected;
     metricsObj["water_detected"] = metrics.water_detected;
     metricsObj["motion_detected"] = metrics.motion_detected;
 

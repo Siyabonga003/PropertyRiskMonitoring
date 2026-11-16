@@ -1,0 +1,23 @@
+ cat << 'EOF' > .gitignore
+# Node.js / Backend
+**/node_modules/
+**/dist/
+npm-debug.log*
+
+# Flutter / Mobile
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/android/.gradle/
+**/ios/Pods/
+
+# ESP32 / Firmware (PlatformIO / Arduino)
+**/.pio/
+**/.vscode/
+
+# Secrets & OS files
+**/.env
+**/.env.*
+.DS_Store
+EOF

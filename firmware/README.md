@@ -9,7 +9,8 @@ Production-grade C++ firmware for the ESP32 microcontroller targeting multi-haza
 | Component | Model / Type | Quantity | Interface | Operating Voltage |
 | :--- | :--- | :---: | :--- | :--- |
 | **Microcontroller** | ESP32 DevKit V1 (30-pin or 38-pin, ESP-WROOM-32) | 1 | Wi-Fi 802.11 b/g/n | 5V via Micro-USB / Vin (3.3V logic) |
-| **Combustible Gas & Smoke** | MQ-2 Sensor Breakout Module | 1 | ADC1 (A0) + Digital (D0) | 5V VCC (~150mA internal heater coil) |
+| **Combustible Gas & Smoke Dual Sensor** | MQ-2 Sensor Breakout Module (Smoke + LPG/Gas) | 1 | ADC1 (A0) + Digital (D0) | 5V VCC (~150mA internal heater coil) |
+| **Optical Flame / Fire Detector** | KY-026 / IR Flame Sensor (760nm–1100nm) | 1 | ADC1 (A0) + Digital (D0) | 3.3V or 5V VCC |
 | **Temperature & Humidity** | DHT22 (AM2302) | 1 | Single-Bus Digital | 3.3V or 5V VCC |
 | **Water Leak Probe** | Conductive Rain / Flood Probe + LM393 Module | 1 | ADC1 (A0) + Digital (D0) | 3.3V or 5V VCC |
 | **Passive Infrared Motion** | PIR HC-SR501 / AM312 | 1 | Digital Out | 5V VCC (3.3V logic out) |

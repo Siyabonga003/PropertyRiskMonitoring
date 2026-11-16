@@ -42,6 +42,11 @@ export class RollupWorker {
       let maxSmoke = -Infinity;
       let smokeCount = 0;
 
+      let sumGas = 0;
+      let maxGas = -Infinity;
+      let gasCount = 0;
+
+      let flameEvents = 0;
       let waterEvents = 0;
       let motionEvents = 0;
 
@@ -61,6 +66,12 @@ export class RollupWorker {
           smokeCount++;
           if (r.smokePpm > maxSmoke) maxSmoke = r.smokePpm;
         }
+        if (r.gasPpm !== null && r.gasPpm !== undefined) {
+          sumGas += r.gasPpm;
+          gasCount++;
+          if (r.gasPpm > maxGas) maxGas = r.gasPpm;
+        }
+        if (r.flameDetected) flameEvents++;
         if (r.waterDetected) waterEvents++;
         if (r.motionDetected) motionEvents++;
       }
@@ -74,6 +85,9 @@ export class RollupWorker {
         avgHumidity: humCount > 0 ? Number((sumHum / humCount).toFixed(2)) : null,
         avgSmokePpm: smokeCount > 0 ? Number((sumSmoke / smokeCount).toFixed(2)) : null,
         maxSmokePpm: maxSmoke !== -Infinity ? Number(maxSmoke.toFixed(2)) : null,
+        avgGasPpm: gasCount > 0 ? Number((sumGas / gasCount).toFixed(2)) : null,
+        maxGasPpm: maxGas !== -Infinity ? Number(maxGas.toFixed(2)) : null,
+        flameEvents,
         waterEvents,
         motionEvents,
       });

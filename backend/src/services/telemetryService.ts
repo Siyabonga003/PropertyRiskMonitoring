@@ -9,6 +9,8 @@ export interface RawTelemetryPacket {
     temperature?: number;
     humidity?: number;
     smoke_ppm?: number;
+    gas_ppm?: number;
+    flame_detected?: boolean;
     water_detected?: boolean;
     motion_detected?: boolean;
   };
@@ -45,6 +47,8 @@ export class TelemetryService {
       temperature: packet.metrics.temperature,
       humidity: packet.metrics.humidity,
       smokePpm: packet.metrics.smoke_ppm,
+      gasPpm: packet.metrics.gas_ppm,
+      flameDetected: !!packet.metrics.flame_detected,
       waterDetected: !!packet.metrics.water_detected,
       motionDetected: !!packet.metrics.motion_detected,
       wifiRssi: packet.diagnostics?.wifi_rssi,

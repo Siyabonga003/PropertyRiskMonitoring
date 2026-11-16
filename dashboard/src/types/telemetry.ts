@@ -5,6 +5,8 @@ export interface TelemetryReading {
   temperature: number | null;
   humidity: number | null;
   smokePpm: number | null;
+  gasPpm: number | null;
+  flameDetected: boolean;
   waterDetected: boolean;
   motionDetected: boolean;
   wifiRssi: number | null;
@@ -17,6 +19,8 @@ export interface TelemetryPacket {
     temperature: number;
     humidity: number;
     smoke_ppm: number;
+    gas_ppm?: number;
+    flame_detected?: boolean;
     water_detected: boolean;
     motion_detected: boolean;
   };

@@ -1,5 +1,7 @@
 export type HazardType =
   | 'SMOKE'
+  | 'FLAME'
+  | 'GAS_LEAK'
   | 'WATER_LEAK'
   | 'HIGH_TEMP'
   | 'LOW_TEMP'

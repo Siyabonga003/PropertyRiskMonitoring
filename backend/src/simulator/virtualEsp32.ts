@@ -16,6 +16,8 @@ const COMMAND_TOPIC = `devices/${DEVICE_ID}/commands`;
 let temperature = 22.5;
 let humidity = 45.0;
 let smokePpm = 25.0;
+let gasPpm = 18.0;
+let flameDetected = false;
 let waterDetected = false;
 let motionDetected = false;
 let buzzerActive = false;
@@ -31,6 +33,8 @@ console.log(`Zone ID:      ${ZONE_ID}`);
 console.log(`Broker URL:   ${BROKER_URL}`);
 console.log('-'.repeat(65));
 console.log('Interactive Keystrokes:');
+console.log('  [f] -> Trigger Active Open Flame / Fire Incident & Alert');
+console.log('  [g] -> Trigger Combustible Gas Leak Spike (350 ppm) & Alert');
 console.log('  [s] -> Trigger High Smoke Spike (650 ppm) & Alert');
 console.log('  [w] -> Trigger Water Leak Event & Alert');
 console.log('  [m] -> Trigger Motion Event & Alert');
@@ -108,6 +112,9 @@ function publishTelemetry() {
   if (smokePpm < 100) {
     smokePpm = Math.max(10, Math.min(60, smokePpm + (Math.random() * 4 - 2)));
   }
+  if (gasPpm < 80) {
+    gasPpm = Math.max(10, Math.min(50, gasPpm + (Math.random() * 3 - 1.5)));
+  }
   temperature = Math.max(18, Math.min(28, temperature + (Math.random() * 0.4 - 0.2)));
   humidity = Math.max(35, Math.min(65, humidity + (Math.random() * 0.6 - 0.3)));
 
@@ -118,6 +125,8 @@ function publishTelemetry() {
       temperature: Number(temperature.toFixed(1)),
       humidity: Number(humidity.toFixed(1)),
       smoke_ppm: Number(smokePpm.toFixed(1)),
+      gas_ppm: Number(gasPpm.toFixed(1)),
+      flame_detected: flameDetected,
       water_detected: waterDetected,
       motion_detected: motionDetected,
     },
@@ -134,7 +143,9 @@ function publishTelemetry() {
       process.stdout.write(
         `\r📊 [${new Date().toLocaleTimeString()}] Temp: ${payload.metrics.temperature}°C | Hum: ${
           payload.metrics.humidity
-        }% | Smoke: ${payload.metrics.smoke_ppm} ppm | Water: ${
+        }% | Smoke: ${payload.metrics.smoke_ppm} ppm | Gas: ${payload.metrics.gas_ppm} ppm | Flame: ${
+          flameDetected ? '🔥 FIRE!' : 'Safe'
+        } | Water: ${
           waterDetected ? '💧 ACTIVE' : 'OK'
         } | Motion: ${motionDetected ? '🚶 DETECTED' : 'None'} | Buzzer: ${
           buzzerActive ? '🔊 ON' : 'OFF'
@@ -142,6 +153,38 @@ function publishTelemetry() {
       );
     }
   });
+}
+
+function triggerFlameAlert() {
+  flameDetected = true;
+  console.log(`\n\n🔥 [SIMULATING OPTICAL FLAME HAZARD] Open flame infrared radiation detected!`);
+  const alertPayload = {
+    deviceId: DEVICE_ID,
+    timestamp: Math.floor(Date.now() / 1000),
+    hazardType: 'FLAME_DETECTED',
+    severity: 'CRITICAL',
+    value: 95.0,
+    unit: '%',
+    message: 'Active open flame / fire detected in Kitchen zone!',
+  };
+  client.publish(ALERT_TOPIC, JSON.stringify(alertPayload), { qos: 1 });
+  publishTelemetry();
+}
+
+function triggerGasAlert() {
+  gasPpm = 380.0;
+  console.log(`\n\n⚠️ [SIMULATING GAS LEAK] Combustible gas / LPG concentration spiked to ${gasPpm} PPM!`);
+  const alertPayload = {
+    deviceId: DEVICE_ID,
+    timestamp: Math.floor(Date.now() / 1000),
+    hazardType: 'GAS_LEAK',
+    severity: 'CRITICAL',
+    value: gasPpm,
+    unit: 'ppm',
+    message: 'Dangerous combustible gas / LPG concentration detected in Kitchen!',
+  };
+  client.publish(ALERT_TOPIC, JSON.stringify(alertPayload), { qos: 1 });
+  publishTelemetry();
 }
 
 function triggerSmokeAlert() {
@@ -200,7 +243,9 @@ function triggerMotionAlert() {
 
 function normalizeSensors() {
   console.log(`\n\n🌿 [NORMALIZING] Resetting all sensor metrics to safe baseline levels.`);
+  flameDetected = false;
   smokePpm = 22.0;
+  gasPpm = 18.0;
   waterDetected = false;
   motionDetected = false;
   temperature = 22.0;
@@ -222,6 +267,12 @@ if (process.stdin.isTTY) {
     }
 
     switch (key.name?.toLowerCase()) {
+      case 'f':
+        triggerFlameAlert();
+        break;
+      case 'g':
+        triggerGasAlert();
+        break;
       case 's':
         triggerSmokeAlert();
         break;

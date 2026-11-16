@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Flame, Droplets, Activity, Thermometer, BellRing, VolumeX, CheckCircle, ChevronRight } from 'lucide-react';
+import { Flame, Droplets, Activity, Thermometer, BellRing, VolumeX, CheckCircle } from 'lucide-react';
 import type { Incident } from '../../types/incidents';
 import { useSocket } from '../../context/SocketContext';
 import { deviceService } from '../../services/api';
@@ -32,15 +32,15 @@ export const CriticalAlertBanner: React.FC = () => {
   const getHazardIcon = (type: Incident['hazardType']) => {
     switch (type) {
       case 'SMOKE':
-        return <Flame className="w-6 h-6 text-rose-300" />;
+        return <Flame className="w-6 h-6" />;
       case 'WATER_LEAK':
-        return <Droplets className="w-6 h-6 text-cyan-300" />;
+        return <Droplets className="w-6 h-6" />;
       case 'HIGH_TEMP':
-        return <Thermometer className="w-6 h-6 text-amber-300" />;
+        return <Thermometer className="w-6 h-6" />;
       case 'MOTION':
-        return <Activity className="w-6 h-6 text-amber-300" />;
+        return <Activity className="w-6 h-6" />;
       default:
-        return <BellRing className="w-6 h-6 text-rose-300" />;
+        return <BellRing className="w-6 h-6" />;
     }
   };
 
@@ -48,14 +48,14 @@ export const CriticalAlertBanner: React.FC = () => {
     if (inc.readingValue === null || inc.readingValue === undefined) return null;
     switch (inc.hazardType) {
       case 'SMOKE':
-        return `${inc.readingValue} PPM`;
+        return `${inc.readingValue} ppm`;
       case 'HIGH_TEMP':
       case 'LOW_TEMP':
         return `${inc.readingValue}°C`;
       case 'WATER_LEAK':
-        return 'Conductivity Active';
+        return 'Probe wet';
       case 'MOTION':
-        return 'PIR Pulse Active';
+        return 'Motion detected';
       default:
         return `${inc.readingValue}`;
     }
@@ -101,83 +101,58 @@ export const CriticalAlertBanner: React.FC = () => {
   };
 
   const isCritical = currentInc.severity === 'CRITICAL';
+  const readingBadge = getReadingBadge(currentInc);
 
   return (
     <div
-      className={`relative rounded-2xl border p-4 sm:p-5 transition-all shadow-2xl overflow-hidden ${
-        isCritical
-          ? 'bg-rose-950/40 border-rose-500/80 shadow-rose-950/70 animate-flash-siren'
-          : 'bg-amber-950/40 border-amber-500/80 shadow-amber-950/70'
+      role="alert"
+      className={`card border-l-8 p-4 sm:p-5 ${
+        isCritical ? 'border-l-status-critical' : 'border-l-status-warn'
       }`}
     >
-      {/* Background strobe effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-rose-500/10 via-transparent to-rose-500/10 pointer-events-none" />
-
-      <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Left: Hazard details & icon */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Hazard details */}
         <div className="flex items-start sm:items-center gap-4">
-          <div
-            className={`p-3 rounded-xl border flex items-center justify-center shrink-0 ${
-              isCritical
-                ? 'bg-rose-500/30 border-rose-400 animate-pulse'
-                : 'bg-amber-500/30 border-amber-400'
-            }`}
-          >
-            {getHazardIcon(currentInc.hazardType)}
-          </div>
+          <div className="p-3 rounded-lg bg-navy-900 text-white shrink-0">{getHazardIcon(currentInc.hazardType)}</div>
 
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={`px-2 py-0.5 text-xs font-black tracking-widest uppercase rounded border ${
-                  isCritical
-                    ? 'bg-rose-600 text-white border-rose-400 animate-pulse'
-                    : 'bg-amber-600 text-slate-950 border-amber-400 font-bold'
-                }`}
-              >
-                {isCritical ? 'CRITICAL HAZARD' : 'SECURITY WARNING'}
+              <span className={`${isCritical ? 'chip-solid-critical' : 'chip-warn'} gap-1.5`}>
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${isCritical ? 'bg-white motion-safe:animate-dot-pulse' : 'bg-[#7A5200]'}`}
+                />
+                {isCritical ? 'Critical hazard' : 'Security warning'}
               </span>
 
-              <span className="text-xs font-semibold text-slate-300">
-                Zone: <strong className="text-white">{currentInc.device?.zone?.name || 'Main Zone'}</strong>
+              <span className="text-sm text-ink-muted">
+                Zone: <strong className="text-navy-900">{currentInc.device?.zone?.name || 'Main Zone'}</strong>
               </span>
 
-              <span className="text-xs text-slate-400 font-mono">
-                ({currentInc.deviceId})
-              </span>
+              <span className="text-xs text-ink-muted font-mono">{currentInc.deviceId}</span>
 
-              <span className="text-xs font-medium text-slate-400 bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700">
-                {calculateElapsed(currentInc.startedAt)}
-              </span>
+              <span className="chip-neutral tabular-nums">{calculateElapsed(currentInc.startedAt)}</span>
             </div>
 
-            <div className="mt-1 flex items-baseline gap-2">
-              <h3 className="text-lg font-bold text-white tracking-tight">
-                {currentInc.details || `${currentInc.hazardType.replace('_', ' ')} detected!`}
+            <div className="mt-1.5 flex flex-wrap items-baseline gap-2">
+              <h3 className="text-lg font-semibold tracking-tight">
+                {currentInc.details || `${currentInc.hazardType.replace('_', ' ')} detected`}
               </h3>
-              {getReadingBadge(currentInc) && (
-                <span className="text-sm font-mono font-bold text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800">
-                  {getReadingBadge(currentInc)}
-                </span>
-              )}
+              {readingBadge && <span className="chip-critical text-sm tabular-nums">{readingBadge}</span>}
             </div>
 
-            {/* Multiple incident counter selector */}
+            {/* Selector when several hazards are active */}
             {activeIncidents.length > 1 && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-slate-300">
+              <div className="mt-2 flex items-center gap-2 text-sm text-ink-muted">
                 <span>
-                  Active Hazards ({selectedIdx + 1} of {activeIncidents.length}):
+                  Active hazards ({selectedIdx + 1} of {activeIncidents.length})
                 </span>
-                <div className="flex gap-1">
+                <div className="seg p-0.5 gap-0.5" role="group" aria-label="Select active hazard">
                   {activeIncidents.map((_, i) => (
                     <button
                       key={i}
                       onClick={() => setSelectedIdx(i)}
-                      className={`w-5 h-5 rounded flex items-center justify-center font-bold text-[10px] transition-colors ${
-                        i === selectedIdx
-                          ? 'bg-rose-500 text-white font-extrabold'
-                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                      }`}
+                      aria-pressed={i === selectedIdx}
+                      className="seg-btn px-2 py-0.5 text-xs"
                     >
                       {i + 1}
                     </button>
@@ -187,44 +162,41 @@ export const CriticalAlertBanner: React.FC = () => {
             )}
 
             {silenceSuccess && (
-              <div className="mt-1 text-xs text-emerald-400 font-medium flex items-center gap-1">
-                <CheckCircle className="w-3.5 h-3.5 inline" /> {silenceSuccess}
+              <div className="mt-1.5 text-sm text-[#0B6B3D] font-medium flex items-center gap-1" role="status">
+                <CheckCircle className="w-4 h-4" /> {silenceSuccess}
               </div>
             )}
           </div>
         </div>
 
-        {/* Right: Action Buttons */}
+        {/* Actions */}
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
-          {/* Silence Buzzer on ESP32 */}
           <button
             onClick={handleSilenceDevice}
             disabled={isProcessing}
             title="Silence the hardware buzzer on the edge node"
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-700 hover:border-slate-500 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-md"
+            className="btn-outline flex-1 sm:flex-initial"
           >
-            <VolumeX className="w-4 h-4 text-amber-400" />
-            <span>Silence Buzzer</span>
+            <VolumeX className="w-4 h-4" />
+            <span>Silence buzzer</span>
           </button>
 
-          {/* Acknowledge Incident */}
           <button
             onClick={handleAcknowledge}
             disabled={isProcessing}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs tracking-wide transition-all shadow-lg shadow-amber-950/60"
+            className="btn-primary flex-1 sm:flex-initial"
           >
-            <CheckCircle className="w-4 h-4 text-slate-950" />
-            <span>Acknowledge Hazard</span>
+            <CheckCircle className="w-4 h-4" />
+            <span>Acknowledge</span>
           </button>
 
-          {/* Direct Resolve (Quick Action) */}
           <button
             onClick={handleDirectResolve}
             disabled={isProcessing}
-            className="p-2 rounded-xl bg-emerald-600/30 border border-emerald-500/50 hover:bg-emerald-600 hover:text-white text-emerald-300 text-xs font-semibold transition-all"
-            title="Mark Hazard Resolved"
+            title="Mark hazard resolved"
+            className="btn-outline flex-1 sm:flex-initial"
           >
-            <ChevronRight className="w-4 h-4" />
+            <span>Resolve</span>
           </button>
         </div>
       </div>

@@ -142,6 +142,8 @@ bool MQTTManager::publishTelemetry(const SensorMetrics &metrics, const SystemDia
         metricsObj["humidity"] = nullptr;
     }
     metricsObj["smoke_ppm"] = serialized(String(metrics.smoke_ppm, 1));
+    metricsObj["gas_ppm"] = serialized(String(metrics.gas_ppm, 1));
+    metricsObj["flame_detected"] = metrics.flame_detected;
     metricsObj["water_detected"] = metrics.water_detected;
     metricsObj["motion_detected"] = metrics.motion_detected;
 
@@ -239,7 +241,11 @@ void MQTTManager::processCommand(const char* jsonStr) {
             }
         }
 
-        if (strcmp(patternStr, "SMOKE") == 0) {
+        if (strcmp(patternStr, "FLAME") == 0 || strcmp(patternStr, "FIRE") == 0) {
+            buzzer.trigger(BUZZER_PATTERN_FLAME, durationMs);
+        } else if (strcmp(patternStr, "GAS") == 0) {
+            buzzer.trigger(BUZZER_PATTERN_GAS, durationMs);
+        } else if (strcmp(patternStr, "SMOKE") == 0) {
             buzzer.trigger(BUZZER_PATTERN_SMOKE, durationMs);
         } else if (strcmp(patternStr, "WATER") == 0) {
             buzzer.trigger(BUZZER_PATTERN_WATER, durationMs);

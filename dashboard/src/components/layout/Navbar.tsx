@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, Flame, Droplets, Volume2, VolumeX, Building2, UserCircle, LogOut } from 'lucide-react';
+import { Volume2, VolumeX, Building2, UserCircle, LogOut } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import { StatusIndicator } from '../common/StatusIndicator';
+import { BrandMark } from '../common/BrandMark';
 import { soundAlert } from '../../services/soundAlert';
 
 interface Props {
@@ -32,158 +33,99 @@ export const Navbar: React.FC<Props> = ({ onOpenSettings }) => {
     }
   };
 
-  return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-900/90 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          {/* Brand Logo & Title */}
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 via-amber-500 to-emerald-400 p-0.5 shadow-lg shadow-rose-900/30">
-              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                <ShieldAlert className="w-5 h-5 text-rose-500" />
-              </div>
-            </div>
+  const roles = [
+    { role: 'ADMIN', label: 'Admin' },
+    { role: 'MANAGER', label: 'Manager' },
+    { role: 'VIEWER', label: 'Viewer' },
+  ] as const;
 
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-slate-100 via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                  RiskGuard
-                </span>
-                <span className="px-1.5 py-0.5 text-[10px] font-bold tracking-wider uppercase rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                  IoT Real-Time
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                <span className="flex items-center gap-0.5 text-rose-400">
-                  <Flame className="w-3 h-3 inline" /> Fire
-                </span>
-                <span>•</span>
-                <span className="flex items-center gap-0.5 text-cyan-400">
-                  <Droplets className="w-3 h-3 inline" /> Water
-                </span>
-                <span>•</span>
-                <span className="text-amber-400">Intrusion</span>
-              </div>
+  return (
+    <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-navy-950/95 backdrop-blur">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 gap-2 sm:gap-4">
+          {/* Brand */}
+          <div className="flex items-center gap-3 shrink-0">
+            <BrandMark className="w-9 h-9" />
+            <div className="leading-tight">
+              <div className="text-lg font-semibold tracking-tight text-white">RiskGuard</div>
+              <div className="hidden sm:block text-xs text-haze">Property risk monitoring</div>
             </div>
           </div>
 
-          {/* Center: Property Selector */}
-          <div className="hidden md:flex items-center bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-1.5 shadow-inner">
-            <Building2 className="w-4 h-4 text-slate-400 mr-2" />
+          {/* Property selector */}
+          <div className="hidden md:flex items-center rounded-lg border border-white/15 bg-white/5 px-3 py-1.5">
+            <Building2 className="w-4 h-4 text-haze mr-2" />
+            <label htmlFor="property-select" className="sr-only">
+              Property
+            </label>
             <select
+              id="property-select"
               value={currentProperty?.id || ''}
               onChange={(e) => {
                 const found = properties.find((p) => p.id === e.target.value);
                 if (found) setCurrentProperty(found);
               }}
-              className="bg-transparent text-sm font-medium text-slate-200 focus:outline-none cursor-pointer pr-4"
+              className="bg-transparent text-sm font-medium text-white focus:outline-none cursor-pointer pr-4"
             >
               {properties.map((p) => (
-                <option key={p.id} value={p.id} className="bg-slate-900 text-slate-200">
+                <option key={p.id} value={p.id} className="bg-navy-900 text-white">
                   {p.name}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Right Action Elements */}
-          <div className="flex items-center gap-3">
-            {/* Live WebSocket Status Badge */}
+          {/* Actions */}
+          <div className="flex items-center gap-1.5 sm:gap-3">
             <StatusIndicator state={connectionState} />
 
-            {/* Audio Siren Mute / Unmute Toggle */}
+            {/* Siren mute toggle */}
             <button
               onClick={handleToggleMute}
+              aria-pressed={!isMuted}
               title={
                 isMuted
                   ? 'Unmute emergency audio siren'
                   : isSirenActive
-                  ? 'Active siren sounding! Click to mute'
-                  : 'Siren active on critical hazards (Click to mute)'
+                  ? 'Siren is sounding. Click to mute'
+                  : 'Siren sounds on critical hazards. Click to mute'
               }
-              className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                isSirenActive
-                  ? 'bg-rose-500/20 border-rose-500 text-rose-300 animate-bounce shadow-lg shadow-rose-950/60'
-                  : isMuted
-                  ? 'bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                  : 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/40'
-              }`}
+              className="btn-outline px-3 py-1.5 text-white"
             >
-              {isMuted ? (
-                <>
-                  <VolumeX className="w-4 h-4 text-slate-400" />
-                  <span className="hidden sm:inline">Siren Muted</span>
-                </>
-              ) : (
-                <>
-                  <Volume2 className={`w-4 h-4 ${isSirenActive ? 'text-rose-400 animate-pulse' : 'text-emerald-400'}`} />
-                  <span className="hidden sm:inline">
-                    {isSirenActive ? `SIREN ALARMING (${activeCriticalCount})` : 'Alarm Armed'}
-                  </span>
-                </>
-              )}
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              <span className="hidden lg:inline">
+                {isMuted ? 'Siren muted' : isSirenActive ? `Siren on (${activeCriticalCount})` : 'Siren ready'}
+              </span>
             </button>
 
-            {/* User Profile & Demo Switcher */}
-            <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+            {/* Profile, role switcher, logout */}
+            <div className="flex items-center gap-1.5 sm:gap-2 pl-2 sm:pl-3 border-l border-white/10">
               <button
                 onClick={onOpenSettings}
-                className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-800 text-left transition-colors"
-                title="Open Settings & Device Management"
+                className="flex items-center gap-2 rounded-lg p-1.5 text-left text-white transition-colors hover:bg-pink/10"
+                title="Open settings and device management"
               >
-                <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
-                  <UserCircle className="w-5 h-5" />
-                </div>
-                <div className="hidden lg:block">
-                  <div className="text-xs font-semibold text-slate-200 leading-tight">
-                    {user?.name || 'Operator'}
-                  </div>
-                  <div className="text-[10px] text-emerald-400 font-mono uppercase tracking-wider">
-                    {user?.role || 'ADMIN'}
-                  </div>
+                <UserCircle className="w-7 h-7 text-haze" />
+                <div className="hidden lg:block leading-tight">
+                  <div className="text-sm font-medium">{user?.name || 'Operator'}</div>
+                  <div className="text-xs text-haze capitalize">{(user?.role || 'ADMIN').toLowerCase()}</div>
                 </div>
               </button>
 
-              {/* Quick Demo Role Switcher */}
-              <div className="hidden xl:flex items-center gap-1 bg-slate-950/80 p-0.5 rounded-md border border-slate-800 text-[10px]">
-                <button
-                  onClick={() => demoLogin('ADMIN')}
-                  className={`px-1.5 py-0.5 rounded ${
-                    user?.role === 'ADMIN'
-                      ? 'bg-rose-500 text-white font-bold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Admin
-                </button>
-                <button
-                  onClick={() => demoLogin('MANAGER')}
-                  className={`px-1.5 py-0.5 rounded ${
-                    user?.role === 'MANAGER'
-                      ? 'bg-amber-500 text-slate-950 font-bold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Mgr
-                </button>
-                <button
-                  onClick={() => demoLogin('VIEWER')}
-                  className={`px-1.5 py-0.5 rounded ${
-                    user?.role === 'VIEWER'
-                      ? 'bg-slate-700 text-white font-bold'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  View
-                </button>
+              <div className="hidden xl:flex seg" role="group" aria-label="Switch demo role">
+                {roles.map(({ role, label }) => (
+                  <button
+                    key={role}
+                    onClick={() => demoLogin(role)}
+                    aria-pressed={user?.role === role}
+                    className="seg-btn px-2.5 py-1 text-xs text-white"
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              {/* Logout Button */}
-              <button
-                onClick={logout}
-                title="Logout session"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors"
-              >
+              <button onClick={logout} title="Sign out" aria-label="Sign out" className="btn-icon text-white">
                 <LogOut className="w-4 h-4" />
               </button>
             </div>

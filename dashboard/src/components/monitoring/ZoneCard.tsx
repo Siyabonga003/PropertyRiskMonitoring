@@ -62,49 +62,37 @@ export const ZoneCard: React.FC<ZoneCardProps> = ({
 
   return (
     <div
-      className={`bg-slate-900 border rounded-2xl p-5 shadow-xl transition-all duration-300 relative overflow-hidden flex flex-col justify-between ${
-        hasCriticalHazard
-          ? 'border-rose-500/80 shadow-rose-950/40 bg-gradient-to-b from-rose-950/20 to-slate-900'
-          : 'border-slate-800 hover:border-slate-700'
+      className={`card p-5 flex flex-col justify-between transition-colors duration-200 ${
+        hasCriticalHazard ? 'border-status-critical ring-1 ring-status-critical' : ''
       }`}
     >
       <div>
-        {/* Header: Zone Name, Device Info, Online Status */}
-        <div className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3 mb-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="text-lg font-bold text-white tracking-tight">{zone.name}</h4>
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  device?.isOnline !== false
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                }`}
-              >
-                {device?.isOnline !== false ? 'ONLINE' : 'OFFLINE'}
+        {/* Header: zone name, device info, online status */}
+        <div className="flex items-start justify-between gap-3 border-b border-line pb-3 mb-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
+              <h4 className="text-lg font-semibold tracking-tight">{zone.name}</h4>
+              <span className={device?.isOnline !== false ? 'chip-ok' : 'chip-critical'}>
+                {device?.isOnline !== false ? 'Online' : 'Offline'}
               </span>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400 mt-1">
-              <span className="flex items-center gap-1 font-mono text-[11px] text-slate-300">
-                <Cpu className="w-3.5 h-3.5 text-slate-400" />
-                {deviceId || 'VIRTUAL_NODE'}
-              </span>
-              <span>•</span>
-              <span className="text-[11px] font-mono text-slate-400">
-                {device?.firmwareVer || 'v2.1.4-esp32'}
-              </span>
+            <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap text-xs text-ink-muted mt-1">
+              <Cpu className="w-3.5 h-3.5" />
+              <span className="font-mono">{deviceId || 'VIRTUAL_NODE'}</span>
+              <span className="font-mono whitespace-nowrap">{device?.firmwareVer || 'v2.1.4-esp32'}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <RssiBadge rssi={telemetry.wifiRssi} />
 
             {onEditThresholds && (
               <button
                 onClick={() => onEditThresholds(zone)}
-                title="Configure Zone Thresholds"
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+                title="Configure zone thresholds"
+                aria-label={`Configure thresholds for ${zone.name}`}
+                className="btn-icon"
               >
                 <Sliders className="w-4 h-4" />
               </button>
@@ -112,8 +100,8 @@ export const ZoneCard: React.FC<ZoneCardProps> = ({
           </div>
         </div>
 
-        {/* Live Gauges Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        {/* Live gauges */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3 mb-3">
           <TemperatureGauge
             temperature={telemetry.temperature}
             maxThreshold={zone.thresholdConfig?.maxTemp || 45}
@@ -125,22 +113,22 @@ export const ZoneCard: React.FC<ZoneCardProps> = ({
           />
         </div>
 
-        {/* Hazard Binary Sensors: Water Leak & Motion */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        {/* Binary sensors: water leak and motion */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3 mb-4">
           <WaterBadge detected={telemetry.waterDetected} />
           <MotionBadge detected={telemetry.motionDetected} isArmed={isArmed} />
         </div>
       </div>
 
-      {/* Card Footer: Buzzer Trigger Action */}
-      <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between">
-        <span className="text-[11px] text-slate-500 font-mono">
-          Updated: {new Date(telemetry.recordedAt).toLocaleTimeString()}
+      {/* Footer: buzzer test */}
+      <div className="pt-3 border-t border-line flex items-center justify-between gap-2">
+        <span className="text-xs text-ink-muted tabular-nums">
+          Updated {new Date(telemetry.recordedAt).toLocaleTimeString()}
         </span>
 
         <div className="flex items-center gap-2">
           {buzzerMessage && (
-            <span className="text-xs text-emerald-400 flex items-center gap-1">
+            <span className="text-xs text-[#0B6B3D] flex items-center gap-1" role="status">
               <CheckCircle className="w-3.5 h-3.5" /> {buzzerMessage}
             </span>
           )}
@@ -148,11 +136,11 @@ export const ZoneCard: React.FC<ZoneCardProps> = ({
           <button
             onClick={handleTestBuzzer}
             disabled={buzzerTesting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all"
-            title="Sends test trigger command via MQTT to ESP32 Piezo buzzer"
+            className="btn-outline px-3 py-1.5"
+            title="Sends a test trigger command via MQTT to the ESP32 piezo buzzer"
           >
-            <BellRing className={`w-3.5 h-3.5 ${buzzerTesting ? 'animate-spin text-amber-400' : 'text-slate-400'}`} />
-            <span>Test Buzzer</span>
+            <BellRing className={`w-4 h-4 ${buzzerTesting ? 'animate-spin' : ''}`} />
+            <span>Test buzzer</span>
           </button>
         </div>
       </div>

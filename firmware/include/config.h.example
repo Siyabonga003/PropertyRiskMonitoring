@@ -43,6 +43,8 @@
 #define SENSOR_DEBOUNCE_TIME_MS    1500    // Minimum time between repeated hazard alerts
 
 // Hazard Thresholds (Default local safety limits)
+#define FLAME_THRESHOLD_PCT        30.0f   // Flame IR intensity threshold (%)
+#define GAS_THRESHOLD_PPM          200.0f  // MQ-2 combustible gas / LPG threshold (PPM)
 #define SMOKE_THRESHOLD_PPM        300.0f  // MQ-2 smoke warning threshold (PPM)
 #define WATER_THRESHOLD_PCT        20.0f   // Water probe wetness threshold (%)
 #define TEMP_HIGH_THRESHOLD_C      50.0f   // Critical high temperature alarm

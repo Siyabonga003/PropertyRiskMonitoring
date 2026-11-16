@@ -8,26 +8,22 @@ interface WaterBadgeProps {
 export const WaterBadge: React.FC<WaterBadgeProps> = ({ detected }) => {
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
-        detected
-          ? 'bg-rose-600/30 border-rose-500 text-rose-300 animate-pulse-fast shadow-lg shadow-rose-950/60'
-          : 'bg-slate-900/80 border-slate-800 text-slate-300'
+      className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors duration-200 ${
+        detected ? 'border-status-critical bg-status-critical-soft' : 'border-transparent bg-mist'
       }`}
     >
       <div
-        className={`w-6 h-6 rounded-lg flex items-center justify-center ${
-          detected ? 'bg-rose-500 text-white animate-bounce' : 'bg-slate-800 text-cyan-400'
+        className={`w-8 h-8 rounded-md flex items-center justify-center ${
+          detected ? 'bg-status-critical text-white' : 'bg-navy-900 text-white'
         }`}
       >
-        <Droplet className="w-3.5 h-3.5" />
+        <Droplet className="w-4 h-4" />
       </div>
 
-      <div className="flex flex-col">
-        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">
-          Water Leak Probe
-        </span>
-        <span className={`text-xs ${detected ? 'text-rose-400 font-extrabold' : 'text-emerald-400'}`}>
-          {detected ? 'LEAK DETECTED!' : 'DRY (SAFE)'}
+      <div className="flex flex-col leading-tight">
+        <span className="text-xs text-ink-muted">Water leak probe</span>
+        <span className={`text-sm font-semibold ${detected ? 'text-[#A3162B]' : 'text-[#0B6B3D]'}`}>
+          {detected ? 'Leak detected' : 'Dry'}
         </span>
       </div>
     </div>
@@ -42,34 +38,26 @@ interface MotionBadgeProps {
 export const MotionBadge: React.FC<MotionBadgeProps> = ({ detected, isArmed = true }) => {
   return (
     <div
-      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
-        detected
-          ? 'bg-amber-500/25 border-amber-500 text-amber-300 animate-pulse shadow-lg shadow-amber-950/60'
-          : 'bg-slate-900/80 border-slate-800 text-slate-300'
+      className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors duration-200 ${
+        detected ? 'border-status-warn bg-status-warn-soft' : 'border-transparent bg-mist'
       }`}
     >
       <div
-        className={`w-6 h-6 rounded-lg flex items-center justify-center ${
-          detected ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+        className={`w-8 h-8 rounded-md flex items-center justify-center ${
+          detected ? 'bg-status-warn text-navy-900' : 'bg-navy-900 text-white'
         }`}
       >
-        <Activity className="w-3.5 h-3.5" />
+        <Activity className="w-4 h-4" />
       </div>
 
-      <div className="flex flex-col">
-        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">
-          PIR Motion Sensor
-        </span>
+      <div className="flex flex-col leading-tight">
+        <span className="text-xs text-ink-muted">PIR motion sensor</span>
         <span
-          className={`text-xs ${
-            detected
-              ? 'text-amber-400 font-extrabold'
-              : isArmed
-              ? 'text-slate-400'
-              : 'text-slate-500 line-through'
+          className={`text-sm font-semibold ${
+            detected ? 'text-[#7A5200]' : isArmed ? 'text-ink-muted' : 'text-ink-muted line-through'
           }`}
         >
-          {detected ? 'MOTION DETECTED!' : isArmed ? 'Clear (No Movement)' : 'Bypassed (Disarmed)'}
+          {detected ? 'Motion detected' : isArmed ? 'Clear' : 'Bypassed (disarmed)'}
         </span>
       </div>
     </div>
@@ -85,15 +73,12 @@ export const RssiBadge: React.FC<RssiBadgeProps> = ({ rssi }) => {
 
   // Signal strength: -50 dBm is excellent, -70 is fair, -85 is weak
   const quality = rssi > -60 ? 'Strong' : rssi > -75 ? 'Good' : 'Weak';
-  const color = rssi > -60 ? 'text-emerald-400' : rssi > -75 ? 'text-amber-400' : 'text-rose-400';
+  const color = rssi > -60 ? 'text-status-ok' : rssi > -75 ? 'text-status-warn' : 'text-status-critical';
 
   return (
-    <div
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-950/70 border border-slate-800 text-[11px] font-mono text-slate-400"
-      title={`Wi-Fi RSSI: ${rssi} dBm (${quality})`}
-    >
-      <Wifi className={`w-3 h-3 ${color}`} />
-      <span>{rssi} dBm</span>
+    <div className="chip-neutral gap-1.5 font-normal" title={`Wi-Fi RSSI: ${rssi} dBm (${quality})`}>
+      <Wifi className={`w-3.5 h-3.5 ${color}`} />
+      <span className="tabular-nums">{rssi} dBm</span>
     </div>
   );
 };

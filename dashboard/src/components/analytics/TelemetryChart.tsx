@@ -13,12 +13,30 @@ import {
 } from 'recharts';
 import type { ChartDataPoint, TelemetryReading } from '../../types/telemetry';
 import { telemetryService } from '../../services/api';
-import { Activity, Clock, Flame, Droplets, Thermometer, RefreshCw } from 'lucide-react';
+import { Flame, Droplets, Thermometer, RefreshCw } from 'lucide-react';
 
 interface Props {
   deviceId?: string;
   latestTelemetry?: Record<string, TelemetryReading>;
 }
+
+// Series colours stay inside the navy family, plus amber for smoke to match its status chip.
+const COLORS = {
+  temperature: '#12214A',
+  humidity: '#5B84C4',
+  smoke: '#E8A100',
+  grid: '#E5EAF4',
+  axis: '#53607F',
+};
+
+const tooltipStyle = {
+  backgroundColor: '#FFFFFF',
+  border: '1px solid #DCE2EF',
+  borderRadius: '0.5rem',
+  fontSize: '12px',
+  color: '#0B1633',
+  boxShadow: '0 4px 16px rgba(6, 12, 31, 0.12)',
+};
 
 export const TelemetryChart: React.FC<Props> = ({ deviceId = 'ESP32_KITCHEN_01', latestTelemetry }) => {
   const [range, setRange] = useState<'1h' | '24h' | '7d'>('1h');
@@ -85,181 +103,109 @@ export const TelemetryChart: React.FC<Props> = ({ deviceId = 'ESP32_KITCHEN_01',
     });
   }, [latestTelemetry, deviceId]);
 
+  const metrics = [
+    { key: 'all', label: 'All signals', Icon: null },
+    { key: 'temperature', label: 'Temp', Icon: Thermometer },
+    { key: 'smoke', label: 'Smoke', Icon: Flame },
+    { key: 'humidity', label: 'Humidity', Icon: Droplets },
+  ] as const;
+
+  const ranges = [
+    { key: '1h', label: '1 hour' },
+    { key: '24h', label: '24 hours' },
+    { key: '7d', label: '7 days' },
+  ] as const;
+
+  // Live updates replace points frequently, so the line draws once rather than re-animating.
+  const lineProps = { type: 'monotone' as const, strokeWidth: 2, dot: false, activeDot: { r: 5 }, isAnimationActive: false };
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-      {/* Chart Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4 mb-4">
+    <div className="card p-5">
+      {/* Header and controls */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-line pb-4 mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-indigo-400" />
-            <h3 className="text-base font-bold text-white tracking-tight">
-              Environmental & Risk Telemetry Streams
-            </h3>
-            {isLoading && <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin" />}
+            <h3 className="text-base font-semibold tracking-tight">Environmental telemetry</h3>
+            {isLoading && <RefreshCw className="w-3.5 h-3.5 text-ink-muted animate-spin" />}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Real-time multi-sensor telemetry graph with live WebSockets stream
-          </p>
+          <p className="text-sm text-ink-muted mt-0.5">Multi-sensor history with a live WebSocket stream</p>
         </div>
 
-        {/* Metric Switcher & Time Range Selector */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Metric Selector */}
-          <div className="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-            <button
-              onClick={() => setActiveMetric('all')}
-              className={`px-2.5 py-1 rounded-lg transition-colors ${
-                activeMetric === 'all' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              All Signals
-            </button>
-            <button
-              onClick={() => setActiveMetric('temperature')}
-              className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${
-                activeMetric === 'temperature'
-                  ? 'bg-rose-500 text-white shadow'
-                  : 'text-slate-400 hover:text-rose-400'
-              }`}
-            >
-              <Thermometer className="w-3.5 h-3.5" />
-              Temp
-            </button>
-            <button
-              onClick={() => setActiveMetric('smoke')}
-              className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${
-                activeMetric === 'smoke' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-amber-400'
-              }`}
-            >
-              <Flame className="w-3.5 h-3.5" />
-              Smoke
-            </button>
-            <button
-              onClick={() => setActiveMetric('humidity')}
-              className={`px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 ${
-                activeMetric === 'humidity' ? 'bg-cyan-500 text-slate-950 shadow' : 'text-slate-400 hover:text-cyan-400'
-              }`}
-            >
-              <Droplets className="w-3.5 h-3.5" />
-              Humidity
-            </button>
+          <div className="seg" role="group" aria-label="Metric">
+            {metrics.map(({ key, label, Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveMetric(key)}
+                aria-pressed={activeMetric === key}
+                className="seg-btn px-2.5 py-1"
+              >
+                {Icon && <Icon className="w-3.5 h-3.5" />}
+                {label}
+              </button>
+            ))}
           </div>
 
-          {/* Time Range Selector */}
-          <div className="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-            <Clock className="w-3.5 h-3.5 text-slate-500 ml-1.5 mr-0.5" />
-            <button
-              onClick={() => setRange('1h')}
-              className={`px-2.5 py-1 rounded-lg transition-colors ${
-                range === '1h' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              1 Hour
-            </button>
-            <button
-              onClick={() => setRange('24h')}
-              className={`px-2.5 py-1 rounded-lg transition-colors ${
-                range === '24h' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              24 Hours
-            </button>
-            <button
-              onClick={() => setRange('7d')}
-              className={`px-2.5 py-1 rounded-lg transition-colors ${
-                range === '7d' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              7 Days
-            </button>
+          <div className="seg" role="group" aria-label="Time range">
+            {ranges.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setRange(key)}
+                aria-pressed={range === key}
+                className="seg-btn px-2.5 py-1"
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Main Chart Canvas */}
+      {/* Chart */}
       <div className="h-72 w-full">
         <ResponsiveContainer width="100%" height="100%">
           {activeMetric === 'smoke' ? (
             <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="smokeGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.5} />
-                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                  <stop offset="5%" stopColor={COLORS.smoke} stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={COLORS.smoke} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="timeFormatted" stroke="#64748b" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#64748b" tick={{ fontSize: 11 }} unit=" ppm" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '0.75rem',
-                  fontSize: '12px',
-                  color: '#f8fafc',
-                }}
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke={COLORS.grid} />
+              <XAxis dataKey="timeFormatted" stroke={COLORS.axis} tick={{ fontSize: 11 }} />
+              <YAxis stroke={COLORS.axis} tick={{ fontSize: 11 }} unit=" ppm" />
+              <Tooltip contentStyle={tooltipStyle} />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
               <Area
                 type="monotone"
                 dataKey="smokePpm"
-                name="Smoke & Combustible Gas (PPM)"
-                stroke="#f59e0b"
+                name="Smoke and combustible gas (ppm)"
+                stroke={COLORS.smoke}
                 strokeWidth={2}
                 fillOpacity={1}
                 fill="url(#smokeGradient)"
+                isAnimationActive={false}
               />
             </AreaChart>
           ) : (
             <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="timeFormatted" stroke="#64748b" tick={{ fontSize: 11 }} />
-              <YAxis stroke="#64748b" tick={{ fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
-                  borderRadius: '0.75rem',
-                  fontSize: '12px',
-                  color: '#f8fafc',
-                }}
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke={COLORS.grid} />
+              <XAxis dataKey="timeFormatted" stroke={COLORS.axis} tick={{ fontSize: 11 }} />
+              <YAxis stroke={COLORS.axis} tick={{ fontSize: 11 }} />
+              <Tooltip contentStyle={tooltipStyle} />
               <Legend wrapperStyle={{ fontSize: '12px' }} />
 
               {(activeMetric === 'all' || activeMetric === 'temperature') && (
-                <Line
-                  type="monotone"
-                  dataKey="temperature"
-                  name="Temperature (°C)"
-                  stroke="#f43f5e"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                />
+                <Line {...lineProps} dataKey="temperature" name="Temperature (°C)" stroke={COLORS.temperature} />
               )}
 
               {(activeMetric === 'all' || activeMetric === 'humidity') && (
-                <Line
-                  type="monotone"
-                  dataKey="humidity"
-                  name="Humidity (% RH)"
-                  stroke="#06b6d4"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                />
+                <Line {...lineProps} dataKey="humidity" name="Humidity (% RH)" stroke={COLORS.humidity} />
               )}
 
               {activeMetric === 'all' && (
-                <Line
-                  type="monotone"
-                  dataKey="smokePpm"
-                  name="Smoke (MQ-2 PPM)"
-                  stroke="#f59e0b"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 5 }}
-                />
+                <Line {...lineProps} dataKey="smokePpm" name="Smoke (MQ-2 ppm)" stroke={COLORS.smoke} />
               )}
             </LineChart>
           )}

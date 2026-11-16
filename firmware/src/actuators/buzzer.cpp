@@ -37,6 +37,20 @@ void Buzzer::trigger(BuzzerPattern pattern, uint32_t durationMs) {
     _motionStep = 0;
 
     switch (pattern) {
+        case BUZZER_PATTERN_FLAME:
+            // Highest urgency fire siren: 60ms ON, 60ms OFF ultra-fast strobe
+            _onTimeMs = 60;
+            _offTimeMs = 60;
+            setHardware(true);
+            break;
+
+        case BUZZER_PATTERN_GAS:
+            // Heavy syncopated warning: 200ms ON, 100ms OFF
+            _onTimeMs = 200;
+            _offTimeMs = 100;
+            setHardware(true);
+            break;
+
         case BUZZER_PATTERN_SMOKE:
             // Fast, aggressive urgency: 100ms ON, 100ms OFF
             _onTimeMs = 100;

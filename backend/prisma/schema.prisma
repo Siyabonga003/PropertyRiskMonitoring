@@ -21,6 +21,8 @@ enum ArmingState {
 
 enum HazardType {
   SMOKE
+  FLAME
+  GAS_LEAK
   WATER_LEAK
   HIGH_TEMP
   LOW_TEMP
@@ -98,6 +100,8 @@ model TelemetryReading {
   temperature    Float?
   humidity       Float?
   smokePpm       Float?
+  gasPpm         Float?
+  flameDetected  Boolean       @default(false)
   waterDetected  Boolean       @default(false)
   motionDetected Boolean       @default(false)
   wifiRssi       Int?
@@ -116,6 +120,9 @@ model TelemetryRollup {
   avgHumidity  Float?
   avgSmokePpm  Float?
   maxSmokePpm  Float?
+  avgGasPpm    Float?
+  maxGasPpm    Float?
+  flameEvents  Int           @default(0)
   waterEvents  Int           @default(0)
   motionEvents Int           @default(0)
 

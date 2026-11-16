@@ -3,26 +3,128 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
-    @apply bg-slate-950 text-slate-100 antialiased selection:bg-rose-500 selection:text-white min-h-screen font-sans;
+    @apply bg-navy-900 text-white antialiased min-h-screen font-sans selection:bg-pink selection:text-navy-900;
+    font-feature-settings: 'tnum' 1, 'lnum' 1;
+  }
+
+  /* Keyboard focus is always visible and always pink, because it marks something clickable. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-pink;
+  }
+
+  /* Native form controls pick up the accent colour. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: #ff2e88;
   }
 }
 
-/* Custom scrollbars for telemetry feeds and audit tables */
+@layer components {
+  /* ---------- Surfaces ---------- */
+  /* White data surface (the 30%) */
+  .card {
+    @apply bg-white text-navy-900 border border-line rounded-xl shadow-card;
+  }
+  /* Navy raised surface (part of the 60%) */
+  .panel {
+    @apply bg-navy-800 text-white border border-white/10 rounded-xl;
+  }
+  .muted-on-white {
+    @apply text-ink-muted;
+  }
+  .muted-on-navy {
+    @apply text-haze;
+  }
+
+  /* ---------- Buttons: the only place pink appears ---------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold
+      transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-pink text-navy-900 hover:bg-pink-light active:bg-pink-dark;
+  }
+  /* Outline inherits text colour so it reads on both navy and white surfaces. */
+  .btn-outline {
+    @apply btn border border-pink text-inherit hover:bg-pink/10 active:bg-pink/20;
+  }
+  .btn-icon {
+    @apply inline-flex items-center justify-center rounded-lg p-2 border border-pink/60 text-inherit
+      transition-colors duration-150 hover:bg-pink/10 hover:border-pink disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Segmented control (tabs, filters, range pickers) */
+  .seg {
+    @apply inline-flex flex-wrap items-center gap-1 rounded-lg border border-pink/40 p-1 max-w-full;
+  }
+  .seg-btn {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-inherit
+      transition-colors duration-150 hover:bg-pink/10;
+  }
+  .seg-btn[aria-pressed='true'],
+  .seg-btn[aria-selected='true'] {
+    @apply bg-pink text-navy-900 font-semibold hover:bg-pink;
+  }
+
+  /* ---------- Form fields (always on white) ---------- */
+  .field {
+    @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-navy-900
+      placeholder:text-ink-muted/70 transition-colors duration-150
+      focus:outline-none focus:border-pink focus:ring-2 focus:ring-pink/30;
+  }
+  .field-label {
+    @apply block text-sm font-medium text-navy-900 mb-1.5;
+  }
+
+  /* ---------- Status chips (small, functional colour) ---------- */
+  .chip {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-semibold;
+  }
+  .chip-critical {
+    @apply chip bg-status-critical-soft text-[#A3162B];
+  }
+  .chip-warn {
+    @apply chip bg-status-warn-soft text-[#7A5200];
+  }
+  .chip-ok {
+    @apply chip bg-status-ok-soft text-[#0B6B3D];
+  }
+  .chip-neutral {
+    @apply chip bg-mist text-ink-muted;
+  }
+  .chip-solid-critical {
+    @apply chip bg-status-critical text-white;
+  }
+}
+
+/* Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: #8c9abf;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6f7fa8;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

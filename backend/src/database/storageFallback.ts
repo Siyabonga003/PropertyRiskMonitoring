@@ -48,6 +48,8 @@ export interface ITelemetryReading {
   temperature: number | null;
   humidity: number | null;
   smokePpm: number | null;
+  gasPpm: number | null;
+  flameDetected: boolean;
   waterDetected: boolean;
   motionDetected: boolean;
   wifiRssi: number | null;
@@ -63,6 +65,9 @@ export interface ITelemetryRollup {
   avgHumidity: number | null;
   avgSmokePpm: number | null;
   maxSmokePpm: number | null;
+  avgGasPpm: number | null;
+  maxGasPpm: number | null;
+  flameEvents: number;
   waterEvents: number;
   motionEvents: number;
 }
@@ -190,6 +195,8 @@ class StorageFallback {
       temperature: 22.5,
       humidity: 45.0,
       smokePpm: 25.0,
+      gasPpm: 18.0,
+      flameDetected: false,
       waterDetected: false,
       motionDetected: false,
       wifiRssi: -65,
@@ -349,6 +356,8 @@ class StorageFallback {
       temperature: reading.temperature,
       humidity: reading.humidity,
       smokePpm: reading.smokePpm,
+      gasPpm: reading.gasPpm ?? null,
+      flameDetected: reading.flameDetected ?? false,
       waterDetected: reading.waterDetected,
       motionDetected: reading.motionDetected,
       wifiRssi: reading.wifiRssi,

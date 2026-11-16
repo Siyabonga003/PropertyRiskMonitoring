@@ -18,98 +18,95 @@ export const IncidentTimelineModal: React.FC<Props> = ({
   if (!incident) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-        >
-          <X className="w-5 h-5" />
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Incident ${incident.id}`}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-950/80 animate-fade-in"
+    >
+      <div className="card w-full max-w-lg p-6 relative">
+        <button onClick={onClose} aria-label="Close" className="btn-icon absolute top-4 right-4">
+          <X className="w-4 h-4" />
         </button>
 
-        {/* Modal Header */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5 pr-12">
+          <div className="p-3 rounded-lg bg-navy-900 text-white">
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white tracking-tight">
-              Incident Incident #{incident.id}
-            </h3>
-            <p className="text-xs text-slate-400">
-              {incident.hazardType.replace('_', ' ')} • {incident.device?.zone?.name || 'All Zones'}
+            <h3 className="text-lg font-semibold tracking-tight">Incident #{incident.id}</h3>
+            <p className="text-sm text-ink-muted">
+              {incident.hazardType.replace('_', ' ')} · {incident.device?.zone?.name || 'All zones'}
             </p>
           </div>
         </div>
 
-        {/* Details Box */}
-        <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 mb-6">
-          <div className="text-xs text-slate-400 uppercase font-semibold tracking-wider mb-1">
-            Sensor Reading & Diagnostics
-          </div>
-          <div className="text-sm font-medium text-slate-200">{incident.details}</div>
-          <div className="mt-3 flex items-center gap-4 text-xs font-mono text-slate-400">
-            <span>Device: <strong className="text-slate-300">{incident.deviceId}</strong></span>
+        {/* Details */}
+        <div className="bg-mist rounded-lg p-4 mb-6">
+          <div className="text-sm text-ink-muted mb-1">Sensor reading and diagnostics</div>
+          <div className="text-sm font-medium">{incident.details}</div>
+          <div className="mt-3 flex items-center gap-4 text-xs text-ink-muted">
+            <span>
+              Device: <strong className="font-mono text-navy-900">{incident.deviceId}</strong>
+            </span>
             {incident.readingValue !== undefined && incident.readingValue !== null && (
-              <span>Reading: <strong className="text-rose-400">{incident.readingValue}</strong></span>
+              <span>
+                Reading: <strong className="text-[#A3162B]">{incident.readingValue}</strong>
+              </span>
             )}
           </div>
         </div>
 
-        {/* Chronological Timeline */}
-        <div className="space-y-4 mb-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
-          {/* Step 1: Triggered */}
+        {/* Timeline */}
+        <div className="space-y-4 mb-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-line">
           <div className="flex items-start gap-3 relative">
-            <div className="w-6 h-6 rounded-full bg-rose-500/30 border border-rose-400 flex items-center justify-center shrink-0 z-10 text-rose-300">
+            <div className="w-6 h-6 rounded-full bg-status-critical-soft text-[#A3162B] border border-status-critical flex items-center justify-center shrink-0 z-10">
               <AlertTriangle className="w-3.5 h-3.5" />
             </div>
             <div>
-              <div className="text-xs font-bold text-white">Hazard Triggered & Siren Dispatched</div>
-              <div className="text-[11px] font-mono text-slate-400">
-                {new Date(incident.startedAt).toLocaleString()}
-              </div>
+              <div className="text-sm font-semibold">Hazard triggered, siren dispatched</div>
+              <div className="text-xs text-ink-muted tabular-nums">{new Date(incident.startedAt).toLocaleString()}</div>
             </div>
           </div>
 
-          {/* Step 2: Acknowledged */}
           <div className="flex items-start gap-3 relative">
             <div
               className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 z-10 ${
                 incident.acknowledgedAt
-                  ? 'bg-amber-500/30 border-amber-400 text-amber-300'
-                  : 'bg-slate-800 border-slate-700 text-slate-500'
+                  ? 'bg-status-warn-soft text-[#7A5200] border-status-warn'
+                  : 'bg-mist text-ink-muted border-line'
               }`}
             >
               <UserCheck className="w-3.5 h-3.5" />
             </div>
             <div>
-              <div className="text-xs font-bold text-white">
-                {incident.acknowledgedAt ? 'Security Operator Acknowledged' : 'Awaiting Acknowledgment'}
+              <div className="text-sm font-semibold">
+                {incident.acknowledgedAt ? 'Acknowledged by operator' : 'Awaiting acknowledgment'}
               </div>
-              <div className="text-[11px] font-mono text-slate-400">
+              <div className="text-xs text-ink-muted tabular-nums">
                 {incident.acknowledgedAt
                   ? `${new Date(incident.acknowledgedAt).toLocaleString()} (${incident.acknowledgedBy || 'Operator'})`
-                  : 'Alarm beacon continues broadcasting until acknowledged'}
+                  : 'The alarm keeps broadcasting until acknowledged'}
               </div>
             </div>
           </div>
 
-          {/* Step 3: Resolved */}
           <div className="flex items-start gap-3 relative">
             <div
               className={`w-6 h-6 rounded-full border flex items-center justify-center shrink-0 z-10 ${
                 incident.resolvedAt
-                  ? 'bg-emerald-500/30 border-emerald-400 text-emerald-300'
-                  : 'bg-slate-800 border-slate-700 text-slate-500'
+                  ? 'bg-status-ok-soft text-[#0B6B3D] border-status-ok'
+                  : 'bg-mist text-ink-muted border-line'
               }`}
             >
               <CheckCircle className="w-3.5 h-3.5" />
             </div>
             <div>
-              <div className="text-xs font-bold text-white">
-                {incident.resolvedAt ? 'Hazard Resolved & Normalized' : 'Pending Resolution'}
+              <div className="text-sm font-semibold">
+                {incident.resolvedAt ? 'Resolved and back to normal' : 'Pending resolution'}
               </div>
-              <div className="text-[11px] font-mono text-slate-400">
+              <div className="text-xs text-ink-muted tabular-nums">
                 {incident.resolvedAt
                   ? new Date(incident.resolvedAt).toLocaleString()
                   : 'Sensor values must return to safe thresholds'}
@@ -118,32 +115,23 @@ export const IncidentTimelineModal: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Modal Actions */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
-          {incident.status === 'ACTIVE' && (
-            <button
-              onClick={() => onAcknowledge(incident.id)}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors"
-            >
-              Acknowledge Incident
-            </button>
-          )}
-
-          {incident.status !== 'RESOLVED' && (
-            <button
-              onClick={() => onResolve(incident.id)}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors"
-            >
-              Mark Incident Resolved
-            </button>
-          )}
-
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
-          >
+        {/* Actions */}
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-4 border-t border-line">
+          <button onClick={onClose} className="btn-outline">
             Close
           </button>
+
+          {incident.status !== 'RESOLVED' && (
+            <button onClick={() => onResolve(incident.id)} className="btn-outline">
+              Mark resolved
+            </button>
+          )}
+
+          {incident.status === 'ACTIVE' && (
+            <button onClick={() => onAcknowledge(incident.id)} className="btn-primary">
+              Acknowledge
+            </button>
+          )}
         </div>
       </div>
     </div>

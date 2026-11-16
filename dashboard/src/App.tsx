@@ -10,9 +10,9 @@ const MainRouter: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
-        <span className="text-sm font-medium">Initializing RiskGuard Mission Control...</span>
+      <div className="min-h-screen bg-navy-900 flex flex-col items-center justify-center text-haze gap-3">
+        <Loader2 className="w-7 h-7 animate-spin text-white" />
+        <span className="text-sm font-medium">Starting RiskGuard…</span>
       </div>
     );
   }
