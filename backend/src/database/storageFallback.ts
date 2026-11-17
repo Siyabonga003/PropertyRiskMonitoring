@@ -16,6 +16,7 @@ export interface IProperty {
   name: string;
   address: string | null;
   armingState: ArmingState;
+  ownerId: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -95,6 +96,9 @@ class StorageFallback {
   public telemetryReadings: ITelemetryReading[] = [];
   public rollups: Map<string, ITelemetryRollup> = new Map();
   public incidents: Map<string, IIncident> = new Map();
+  public propertyMembers: Map<string, Set<string>> = new Map();
+  public enrollments: Map<string, { deviceId: string; name: string; deviceToken: string; pairingTokenHash: string; firmwareVer: string | null; expiresAt: Date; claimedAt: Date | null }> = new Map();
+  public pushTokens: Map<string, { id: string; userId: string; token: string; platform: string; enabled: boolean }> = new Map();
 
   private readingCounter = 1;
 
@@ -123,6 +127,7 @@ class StorageFallback {
       name: 'Sunset Villa Headquarters',
       address: '742 Evergreen Terrace, Springfield',
       armingState: ArmingState.DISARMED,
+      ownerId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -217,6 +222,39 @@ class StorageFallback {
     return this.users.get(id) || null;
   }
 
+  async getUsersSafe() {
+    return Array.from(this.users.values()).map(({ id, email, name, role, createdAt, updatedAt }) => ({ id, email, name, role, createdAt, updatedAt }));
+  }
+
+  async setUserRole(userId: string, role: Role): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) { user.role = role; user.updatedAt = new Date(); }
+  }
+
+  async syncPropertyRole(userId: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (!user || user.role === Role.ADMIN) return;
+    const owns = [...this.properties.values()].some((property) => property.ownerId === userId);
+    const delegated = [...this.propertyMembers.values()].some((members) => members.has(userId));
+    await this.setUserRole(userId, owns ? Role.PROPERTY_OWNER : delegated ? Role.AUTHORIZED_DELEGATE : Role.PROPERTY_OWNER);
+  }
+
+  async upsertPushToken(data: { userId: string; token: string; platform: string; enabled?: boolean }) {
+    const existing = Array.from(this.pushTokens.values()).find((row) => row.token === data.token);
+    const id = existing?.id || `push_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const record = { id, userId: data.userId, token: data.token, platform: data.platform, enabled: data.enabled ?? true };
+    this.pushTokens.set(id, record);
+    return record;
+  }
+
+  async removePushToken(userId: string, token: string): Promise<void> {
+    for (const [id, row] of this.pushTokens) if (row.userId === userId && row.token === token) this.pushTokens.delete(id);
+  }
+
+  async getEnabledPushTokens(userId: string) {
+    return Array.from(this.pushTokens.values()).filter((row) => row.userId === userId && row.enabled);
+  }
+
   async createUser(data: Omit<IUser, 'id' | 'createdAt' | 'updatedAt'>): Promise<IUser> {
     const id = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const user: IUser = {
@@ -234,17 +272,73 @@ class StorageFallback {
     return Array.from(this.properties.values());
   }
 
+  async getPropertiesForUser(userId: string, isAdmin = false): Promise<IProperty[]> {
+    if (isAdmin) return this.getProperties();
+    return Array.from(this.properties.values()).filter((property) =>
+      property.ownerId === userId || this.propertyMembers.get(property.id)?.has(userId) === true,
+    );
+  }
+
+  async canAccessProperty(propertyId: string, userId: string, isAdmin = false): Promise<boolean> {
+    if (isAdmin) return this.properties.has(propertyId);
+    return this.properties.get(propertyId)?.ownerId === userId || this.propertyMembers.get(propertyId)?.has(userId) === true;
+  }
+
+  async isPropertyOwner(propertyId: string, userId: string): Promise<boolean> {
+    return this.properties.get(propertyId)?.ownerId === userId;
+  }
+
+  async setPropertyOwner(propertyId: string, userId: string): Promise<{ previousOwnerId: string | null } | null> {
+    const property = this.properties.get(propertyId);
+    if (!property || !this.users.has(userId)) return null;
+    const previousOwner = property.ownerId;
+    if (previousOwner && previousOwner !== userId) this.propertyMembers.get(propertyId)?.delete(previousOwner);
+    property.ownerId = userId;
+    property.updatedAt = new Date();
+    this.properties.set(propertyId, property);
+    return { previousOwnerId: previousOwner };
+  }
+
+  async getPropertyUserIds(propertyId: string): Promise<string[]> {
+    if (!this.properties.has(propertyId)) return [];
+    const ids = new Set(this.propertyMembers.get(propertyId) || []);
+    const ownerId = this.properties.get(propertyId)?.ownerId;
+    if (ownerId) ids.add(ownerId);
+    for (const user of this.users.values()) if (user.role === Role.ADMIN) ids.add(user.id);
+    return Array.from(ids);
+  }
+
+  async getDelegates(propertyId: string): Promise<Array<Pick<IUser, 'id' | 'email' | 'name'>>> {
+    const ownerId = this.properties.get(propertyId)?.ownerId;
+    return Array.from(this.propertyMembers.get(propertyId) || [])
+      .filter((id) => id !== ownerId)
+      .map((id) => this.users.get(id))
+      .filter((user): user is IUser => Boolean(user))
+      .map(({ id, email, name }) => ({ id, email, name }));
+  }
+
+  async addDelegate(propertyId: string, userId: string): Promise<void> {
+    const members = this.propertyMembers.get(propertyId) || new Set<string>();
+    members.add(userId);
+    this.propertyMembers.set(propertyId, members);
+  }
+
+  async removeDelegate(propertyId: string, userId: string): Promise<void> {
+    this.propertyMembers.get(propertyId)?.delete(userId);
+  }
+
   async getPropertyById(id: string): Promise<IProperty | null> {
     return this.properties.get(id) || null;
   }
 
-  async createProperty(data: { name: string; address?: string | null; armingState?: ArmingState }): Promise<IProperty> {
+  async createProperty(data: { name: string; address?: string | null; armingState?: ArmingState; ownerId?: string | null }): Promise<IProperty> {
     const id = `prop_${Date.now()}`;
     const property: IProperty = {
       id,
       name: data.name,
       address: data.address || null,
       armingState: data.armingState || ArmingState.DISARMED,
+      ownerId: data.ownerId || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -298,6 +392,16 @@ class StorageFallback {
     return Array.from(this.devices.values());
   }
 
+  async getDevicesForUser(userId: string, isAdmin = false): Promise<IDevice[]> {
+    if (isAdmin) return this.getDevices();
+    const devices: IDevice[] = [];
+    for (const device of this.devices.values()) {
+      const propertyId = await this.getPropertyIdForDevice(device.id);
+      if (propertyId && await this.canAccessProperty(propertyId, userId)) devices.push(device);
+    }
+    return devices;
+  }
+
   async getDeviceById(id: string): Promise<IDevice | null> {
     return this.devices.get(id) || null;
   }
@@ -335,6 +439,49 @@ class StorageFallback {
     };
     this.devices.set(data.id, created);
     return created;
+  }
+
+  async createDeviceEnrollment(data: { deviceId: string; name: string; deviceToken: string; pairingTokenHash: string; firmwareVer?: string | null; expiresAt: Date }): Promise<{ deviceId: string; name: string; deviceToken: string; pairingTokenHash: string; firmwareVer: string | null; expiresAt: Date; claimedAt: Date | null }> {
+    if (this.devices.has(data.deviceId) || this.enrollments.has(data.deviceId)) throw new Error('Device ID already exists.');
+    const record = { ...data, firmwareVer: data.firmwareVer || null, claimedAt: null };
+    this.enrollments.set(data.deviceId, record);
+    return record;
+  }
+
+  async getEnrollmentByPairingHash(pairingTokenHash: string) {
+    return Array.from(this.enrollments.values()).find((item) =>
+      item.pairingTokenHash === pairingTokenHash && item.claimedAt === null && item.expiresAt > new Date(),
+    ) || null;
+  }
+
+  async claimDeviceEnrollment(deviceId: string, zoneId: string): Promise<IDevice | null> {
+    const enrollment = this.enrollments.get(deviceId);
+    if (!enrollment || enrollment.claimedAt || enrollment.expiresAt <= new Date()) return null;
+    enrollment.claimedAt = new Date();
+    this.enrollments.set(deviceId, enrollment);
+    try {
+      return await this.upsertDevice({
+        id: enrollment.deviceId, name: enrollment.name, zoneId,
+        deviceToken: enrollment.deviceToken, firmwareVer: enrollment.firmwareVer || undefined, isOnline: false,
+      });
+    } catch (error) {
+      enrollment.claimedAt = null;
+      this.enrollments.set(deviceId, enrollment);
+      throw error;
+    }
+  }
+
+  async getPropertyIdForDevice(deviceId: string): Promise<string | null> {
+    const device = this.devices.get(deviceId);
+    return device ? this.zones.get(device.zoneId)?.propertyId || null : null;
+  }
+
+  async getPropertyIdForZone(zoneId: string): Promise<string | null> {
+    return this.zones.get(zoneId)?.propertyId || null;
+  }
+
+  async findDeviceByToken(deviceToken: string): Promise<IDevice | null> {
+    return Array.from(this.devices.values()).find((device) => device.deviceToken === deviceToken) || null;
   }
 
   async setDeviceOnlineStatus(id: string, isOnline: boolean): Promise<IDevice | null> {
@@ -437,10 +584,14 @@ class StorageFallback {
     return incident;
   }
 
-  async getIncidents(filter?: { propertyId?: string; status?: IncidentStatus }): Promise<IIncident[]> {
+  async getIncidents(filter?: { propertyId?: string; propertyIds?: string[]; status?: IncidentStatus }): Promise<IIncident[]> {
     let list = Array.from(this.incidents.values());
     if (filter?.propertyId) {
       list = list.filter((inc) => inc.propertyId === filter.propertyId);
+    }
+    if (filter?.propertyIds) {
+      const allowed = new Set(filter.propertyIds);
+      list = list.filter((inc) => allowed.has(inc.propertyId));
     }
     if (filter?.status) {
       list = list.filter((inc) => inc.status === filter.status);

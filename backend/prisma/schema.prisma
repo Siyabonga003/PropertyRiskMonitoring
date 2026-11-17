@@ -9,6 +9,10 @@ generator client {
 
 enum Role {
   ADMIN
+  PROPERTY_OWNER
+  AUTHORIZED_DELEGATE
+  // Legacy values retained so existing installations can migrate without
+  // removing data. They do not grant administrative or ownership rights.
   MANAGER
   VIEWER
 }
@@ -43,15 +47,17 @@ enum IncidentStatus {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  passwordHash String
-  name         String
-  role         Role          @default(VIEWER)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  properties   Property[]    @relation("PropertyMembers")
-  incidentsAck Incident[]    @relation("AcknowledgedBy")
+  id             String        @id @default(uuid())
+  email          String        @unique
+  passwordHash   String
+  name           String
+  role           Role          @default(PROPERTY_OWNER)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  properties     Property[]    @relation("PropertyMembers")
+  ownedProperties Property[]   @relation("PropertyOwner")
+  incidentsAck   Incident[]    @relation("AcknowledgedBy")
+  pushTokens     PushToken[]
 }
 
 model Property {
@@ -59,30 +65,34 @@ model Property {
   name        String
   address     String?
   armingState ArmingState   @default(DISARMED)
+  ownerId     String?
+  owner       User?         @relation("PropertyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   users       User[]        @relation("PropertyMembers")
   zones       Zone[]
   incidents   Incident[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+
+  @@index([ownerId])
 }
 
 model Zone {
   id              String        @id @default(uuid())
   propertyId      String
   property        Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  name            String        // e.g., "Kitchen", "Server Room", "Basement"
+  name            String
   devices         Device[]
-  thresholdConfig Json?         // Custom thresholds per zone (e.g. max_temp: 50, smoke_ppm: 300)
+  thresholdConfig Json?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 }
 
 model Device {
-  id          String        @id // Hardware identifier / MAC address
+  id          String        @id
   name        String
   zoneId      String
   zone        Zone          @relation(fields: [zoneId], references: [id], onDelete: Cascade)
-  deviceToken String        @unique // Auth token for MQTT
+  deviceToken String        @unique
   isOnline    Boolean       @default(false)
   lastSeenAt  DateTime?
   firmwareVer String?
@@ -90,6 +100,32 @@ model Device {
   incidents   Incident[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+}
+
+/// An administrator provisions a device once. The QR pairing secret is stored
+/// as a hash and consumed atomically when an owner claims the device.
+model DeviceEnrollment {
+  deviceId       String   @id
+  name           String
+  deviceToken    String   @unique
+  pairingTokenHash String @unique
+  firmwareVer    String?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  claimedAt      DateTime?
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, enabled])
 }
 
 model TelemetryReading {
@@ -113,7 +149,7 @@ model TelemetryReading {
 model TelemetryRollup {
   id           BigInt        @id @default(autoincrement())
   deviceId     String
-  bucketStart  DateTime      // 1-hour or 1-day bucket
+  bucketStart  DateTime
   avgTemp      Float?
   minTemp      Float?
   maxTemp      Float?

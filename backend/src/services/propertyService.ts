@@ -11,8 +11,8 @@ export class PropertyService {
     return db.getPropertyById(id);
   }
 
-  public async createProperty(data: { name: string; address?: string | null; armingState?: ArmingState }) {
-    return db.createProperty(data);
+  public async createProperty(data: { name: string; address?: string | null; armingState?: ArmingState }, ownerId: string) {
+    return db.createProperty(data, ownerId);
   }
 
   public async updateArmingState(propertyId: string, armingState: ArmingState) {

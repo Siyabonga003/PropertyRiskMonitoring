@@ -1,181 +1,175 @@
 import 'dart:convert';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import '../models/telemetry.dart';
-import '../models/incident.dart';
-import '../models/property.dart';
 
+import '../config/api_config.dart';
+
+class ApiException implements Exception {
+  final String message;
+  final int? statusCode;
+  const ApiException(this.message, [this.statusCode]);
+  @override
+  String toString() => message;
+}
+
+/// Typed boundary around the routes that actually exist in backend/src/server.ts.
+/// Errors are surfaced to the UI rather than silently converted to empty data.
 class ApiService {
+  ApiService({String? baseUrl, FlutterSecureStorage? storage})
+      : baseUrl = (baseUrl ?? ApiConfig.baseUrl).replaceFirst(RegExp(r'/$'), ''),
+        _storage = storage ?? const FlutterSecureStorage();
+
   String baseUrl;
+  final FlutterSecureStorage _storage;
+  static const _tokenKey = 'propertyguard.jwt';
 
-  ApiService({this.baseUrl = 'http://10.0.2.2:5000'}); // default to Android emulator loopback
+  Future<String?> get token => _storage.read(key: _tokenKey);
+  Future<void> clearSession() => _storage.delete(key: _tokenKey);
 
-  void updateBaseUrl(String url) {
-    if (url.endsWith('/')) {
-      baseUrl = url.substring(0, url.length - 1);
-    } else {
-      baseUrl = url;
+  Uri _uri(String path, [Map<String, String>? query]) =>
+      Uri.parse('$baseUrl$path').replace(queryParameters: query);
+
+  Future<Map<String, String>> _headers({bool json = false}) async {
+    final headers = <String, String>{'Accept': 'application/json'};
+    if (json) headers['Content-Type'] = 'application/json';
+    final accessToken = await token;
+    if (accessToken != null && accessToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $accessToken';
     }
+    return headers;
   }
 
-  // Properties
-  Future<List<Property>> getProperties() async {
+  Future<dynamic> _request(
+    String method,
+    String path, {
+    Map<String, String>? query,
+    Map<String, dynamic>? body,
+  }) async {
+    final headers = await _headers(json: body != null);
+    final uri = _uri(path, query);
+    late http.Response response;
     try {
-      final res = await http
-          .get(Uri.parse('$baseUrl/api/properties'))
-          .timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) {
-        final List<dynamic> list = jsonDecode(res.body);
-        return list.map((p) => Property.fromJson(p as Map<String, dynamic>)).toList();
+      if (method == 'POST') {
+        response = await http.post(uri, headers: headers, body: jsonEncode(body)).timeout(ApiConfig.requestTimeout);
+      } else if (method == 'PATCH') {
+        response = await http.patch(uri, headers: headers, body: jsonEncode(body ?? const {})).timeout(ApiConfig.requestTimeout);
+      } else if (method == 'DELETE') {
+        response = await http.delete(uri, headers: headers, body: jsonEncode(body ?? const {})).timeout(ApiConfig.requestTimeout);
+      } else {
+        response = await http.get(uri, headers: headers).timeout(ApiConfig.requestTimeout);
       }
-    } catch (_) {}
-    return [];
+    } on Exception catch (e) {
+      throw ApiException('Could not reach PropertyGuard services. Check your connection and API URL. ($e)');
+    }
+
+    dynamic payload;
+    try {
+      payload = response.body.isEmpty ? null : jsonDecode(response.body);
+    } catch (_) {
+      payload = null;
+    }
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      if (response.statusCode == 401 || _message(payload).toLowerCase().contains('expired')) {
+        await clearSession();
+        throw const ApiException('Your session has expired. Please sign in again.', 401);
+      }
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_message(payload, fallback: 'Request failed (${response.statusCode}).'), response.statusCode);
+    }
+    return payload;
   }
 
-  Future<Property?> getProperty(String id) async {
-    try {
-      final res = await http
-          .get(Uri.parse('$baseUrl/api/properties/$id'))
-          .timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) {
-        return Property.fromJson(jsonDecode(res.body));
-      }
-    } catch (_) {}
+  String _message(dynamic payload, {String fallback = 'The request could not be completed.'}) {
+    if (payload is Map && payload['error'] != null) return payload['error'].toString();
+    return fallback;
+  }
+
+  Future<Map<String, dynamic>> signIn(String email, String password) async {
+    final data = await _request('POST', '/api/auth/login', body: {'email': email, 'password': password});
+    if (data is! Map || data['token'] == null || data['user'] is! Map) {
+      throw const ApiException('The server returned an unexpected sign-in response.');
+    }
+    await _storage.write(key: _tokenKey, value: data['token'].toString());
+    return Map<String, dynamic>.from(data['user'] as Map);
+  }
+
+  Future<Map<String, dynamic>> register(String name, String email, String password) async {
+    final data = await _request('POST', '/api/auth/register', body: {'name': name, 'email': email, 'password': password});
+    if (data is! Map || data['token'] == null || data['user'] is! Map) {
+      throw const ApiException('The server returned an unexpected registration response.');
+    }
+    await _storage.write(key: _tokenKey, value: data['token'].toString());
+    return Map<String, dynamic>.from(data['user'] as Map);
+  }
+
+  Future<Map<String, dynamic>> me() async {
+    final data = await _request('GET', '/api/auth/me');
+    if (data is Map && data['user'] is Map) return Map<String, dynamic>.from(data['user'] as Map);
+    throw const ApiException('Could not load the signed-in account.');
+  }
+
+  Future<List<Map<String, dynamic>>> properties() async => _mapList(await _request('GET', '/api/properties'));
+  Future<List<Map<String, dynamic>>> zones(String propertyId) async => _mapList(await _request('GET', '/api/properties/$propertyId/zones'));
+  Future<List<Map<String, dynamic>>> incidents({String? propertyId}) async => _mapList(
+        await _request('GET', '/api/incidents', query: propertyId == null ? null : {'propertyId': propertyId}),
+      );
+  Future<List<Map<String, dynamic>>> devices() async => _mapList(await _request('GET', '/api/devices'));
+
+  Future<Map<String, dynamic>?> latestReading(String deviceId) async {
+    final data = await _request('GET', '/api/telemetry/latest', query: {'deviceId': deviceId});
+    if (data is Map && data.isNotEmpty) return Map<String, dynamic>.from(data);
     return null;
   }
 
-  Future<bool> updateArmingState(String propertyId, ArmingState state) async {
-    try {
-      final res = await http
-          .patch(
-            Uri.parse('$baseUrl/api/properties/$propertyId/arming'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'armingState': state.toApiString()}),
-          )
-          .timeout(const Duration(seconds: 4));
-      return res.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
+  Future<Map<String, dynamic>> acknowledge(String incidentId) async {
+    final data = await _request('PATCH', '/api/incidents/$incidentId/acknowledge', body: const {});
+    return Map<String, dynamic>.from(data as Map);
   }
 
-  // Telemetry
-  Future<TelemetryReading?> getLatestTelemetry({String? deviceId}) async {
-    try {
-      final uri = Uri.parse('$baseUrl/api/telemetry/latest')
-          .replace(queryParameters: deviceId != null ? {'deviceId': deviceId} : null);
-      final res = await http.get(uri).timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        if (data is Map<String, dynamic> && data.isNotEmpty) {
-          return TelemetryReading.fromJson(data);
-        }
-      }
-    } catch (_) {}
-    return null;
+  Future<Map<String, dynamic>> claimDevice({required String pairingToken, required String propertyId}) async {
+    final data = await _request('POST', '/api/devices/claim', body: {'pairingToken': pairingToken, 'propertyId': propertyId});
+    return Map<String, dynamic>.from(data as Map);
   }
 
-  Future<List<TelemetryReading>> getTelemetryHistory({String? deviceId, int limit = 20}) async {
-    try {
-      final queryParams = <String, String>{
-        'limit': limit.toString(),
-      };
-      if (deviceId != null) {
-        queryParams['deviceId'] = deviceId;
-      }
-      final uri = Uri.parse('$baseUrl/api/telemetry/history').replace(queryParameters: queryParams);
-      final res = await http.get(uri).timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) {
-        final List<dynamic> list = jsonDecode(res.body);
-        return list.map((r) => TelemetryReading.fromJson(r as Map<String, dynamic>)).toList();
-      }
-    } catch (_) {}
-    return [];
+  Future<List<Map<String, dynamic>>> delegates(String propertyId) async =>
+      _mapList(await _request('GET', '/api/properties/$propertyId/delegates'));
+
+  Future<Map<String, dynamic>> addDelegate(String propertyId, String email) async {
+    final data = await _request('POST', '/api/properties/$propertyId/delegates', body: {'email': email});
+    return Map<String, dynamic>.from(data as Map);
   }
 
-  // Incidents
-  Future<List<Incident>> getIncidents({String? propertyId, IncidentStatus? status}) async {
-    try {
-      final params = <String, String>{};
-      if (propertyId != null) params['propertyId'] = propertyId;
-      if (status != null) {
-        params['status'] = status.name.toUpperCase();
-      }
-      final uri = Uri.parse('$baseUrl/api/incidents').replace(queryParameters: params);
-      final res = await http.get(uri).timeout(const Duration(seconds: 4));
-      if (res.statusCode == 200) {
-        final List<dynamic> list = jsonDecode(res.body);
-        return list.map((i) => Incident.fromJson(i as Map<String, dynamic>)).toList();
-      }
-    } catch (_) {}
-    return [];
+  Future<void> revokeDelegate(String propertyId, String userId) async {
+    await _request('DELETE', '/api/properties/$propertyId/delegates/$userId');
   }
 
-  Future<bool> acknowledgeIncident(String incidentId, {String? userId}) async {
-    try {
-      final res = await http
-          .patch(
-            Uri.parse('$baseUrl/api/incidents/$incidentId/acknowledge'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({'userId': userId ?? 'user_mobile'}),
-          )
-          .timeout(const Duration(seconds: 4));
-      return res.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
+  Future<void> registerPushToken(String token, String platform) async {
+    await _request('POST', '/api/auth/push-token', body: {'token': token, 'platform': platform, 'enabled': true});
   }
 
-  Future<bool> resolveIncident(String incidentId) async {
-    try {
-      final res = await http
-          .patch(
-            Uri.parse('$baseUrl/api/incidents/$incidentId/resolve'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({}),
-          )
-          .timeout(const Duration(seconds: 4));
-      return res.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
+  Future<void> unregisterPushToken(String token) async {
+    await _request('DELETE', '/api/auth/push-token', body: {'token': token});
   }
 
-  // Actuator Commands
-  Future<bool> triggerBuzzer(String deviceId, {int durationMs = 30000, String pattern = 'PULSE'}) async {
-    try {
-      final res = await http
-          .post(
-            Uri.parse('$baseUrl/api/devices/$deviceId/command'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'command': 'TRIGGER_BUZZER',
-              'parameters': {
-                'durationMs': durationMs,
-                'pattern': pattern,
-              },
-            }),
-          )
-          .timeout(const Duration(seconds: 4));
-      return res.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
+  Future<Map<String, dynamic>> createProperty({required String name, String? address}) async {
+    return Map<String, dynamic>.from(await _request('POST', '/api/properties', body: {
+      'name': name,
+      if (address != null && address.trim().isNotEmpty) 'address': address,
+    }) as Map);
   }
 
-  Future<bool> silenceBuzzer(String deviceId) async {
-    try {
-      final res = await http
-          .post(
-            Uri.parse('$baseUrl/api/devices/$deviceId/command'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'command': 'SILENCE_BUZZER',
-            }),
-          )
-          .timeout(const Duration(seconds: 4));
-      return res.statusCode == 200;
-    } catch (_) {
-      return false;
-    }
+  Future<bool> notificationPreference() async => await _storage.read(key: 'propertyguard.notifications') == 'true';
+
+  Future<void> updateNotificationPreference(bool enabled) async {
+    // Persist the device preference locally. There is no backend notification
+    // preference or FCM registration endpoint in this repository.
+    await _storage.write(key: 'propertyguard.notifications', value: enabled.toString());
+  }
+
+  static List<Map<String, dynamic>> _mapList(dynamic value) {
+    if (value is! List) return const [];
+    return value.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
   }
 }

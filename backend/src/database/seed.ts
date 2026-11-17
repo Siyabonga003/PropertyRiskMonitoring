@@ -1,7 +1,11 @@
 import { PrismaClient, Role, ArmingState } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { env } from '../config/env';
 
 export async function seedDatabase(client?: PrismaClient) {
+  if (env.NODE_ENV === 'production') {
+    throw new Error('The development demo seed is disabled in production. Provision administrator accounts securely.');
+  }
   const prisma = client || new PrismaClient();
   console.log('[Seed] Seeding database with initial demo data...');
 

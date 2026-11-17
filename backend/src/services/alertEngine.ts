@@ -180,7 +180,12 @@ export class AlertEngine {
     deviceId: string,
     alertPayload: HazardAlertPayload
   ) {
-    let hazardType: HazardType = HazardType.SMOKE;
+    const device = await db.getDeviceById(deviceId);
+    const actualPropertyId = await db.getPropertyIdForDevice(deviceId);
+    if (!device || device.zoneId !== zoneId || actualPropertyId !== propertyId) {
+      throw new Error('Alert routing identifiers do not match the enrolled device assignment.');
+    }
+    let hazardType: HazardType;
     const rawType = (alertPayload.hazardType || '').toUpperCase();
 
     if (rawType.includes('FLAME') || rawType.includes('FIRE')) {
@@ -189,6 +194,8 @@ export class AlertEngine {
       hazardType = HazardType.GAS_LEAK;
     } else if (rawType.includes('WATER') || rawType.includes('LEAK')) {
       hazardType = HazardType.WATER_LEAK;
+    } else if (rawType.includes('SMOKE')) {
+      hazardType = HazardType.SMOKE;
     } else if (rawType.includes('MOTION') || rawType.includes('PIR')) {
       hazardType = HazardType.MOTION;
     } else if (rawType.includes('TEMP_HIGH')) {
@@ -197,6 +204,8 @@ export class AlertEngine {
       hazardType = HazardType.LOW_TEMP;
     } else if (rawType.includes('OFFLINE')) {
       hazardType = HazardType.DEVICE_OFFLINE;
+    } else {
+      throw new Error(`Unsupported hazard type '${alertPayload.hazardType}'.`);
     }
 
     let severity: IncidentSeverity = IncidentSeverity.CRITICAL;
