@@ -15,6 +15,7 @@ import zonesRoutes from './api/routes/zones.routes';
 import devicesRoutes from './api/routes/devices.routes';
 import telemetryRoutes from './api/routes/telemetry.routes';
 import incidentsRoutes from './api/routes/incidents.routes';
+import adminRoutes from './api/routes/admin.routes';
 
 // Workers
 import { rollupWorker } from './workers/rollups';
@@ -26,7 +27,7 @@ export async function createServer(): Promise<{ app: Application; server: http.S
   // Middleware
   app.use(
     cors({
-      origin: '*', // Allow development dashboard
+      origin: env.CLIENT_URL.split(',').map((origin) => origin.trim()).filter(Boolean),
       credentials: true,
     })
   );
@@ -60,6 +61,7 @@ export async function createServer(): Promise<{ app: Application; server: http.S
   app.use('/api/devices', devicesRoutes);
   app.use('/api/telemetry', telemetryRoutes);
   app.use('/api/incidents', incidentsRoutes);
+  app.use('/api/admin', adminRoutes);
 
   // Error handling middleware
   app.use(errorHandler);
@@ -81,6 +83,9 @@ export async function startServer() {
 
   // 2. Database Connection Check
   const isPostgresReady = await checkPrismaConnection();
+  if (!isPostgresReady && env.NODE_ENV === 'production') {
+    throw new Error('PostgreSQL is required in production; refusing to start with development in-memory data.');
+  }
   if (isPostgresReady) {
     // Optionally trigger seed if needed
     try {

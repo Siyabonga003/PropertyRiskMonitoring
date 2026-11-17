@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'services/api_service.dart';
 import 'services/realtime_service.dart';
 import 'screens/dashboard_screen.dart';
@@ -40,9 +41,11 @@ class PropertyRiskApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Property Risk Monitoring System',
+      title: 'PropertyGuard',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.darkTheme.copyWith(
+        textTheme: GoogleFonts.interTextTheme(AppTheme.darkTheme.textTheme),
+      ),
       home: DashboardScreen(
         apiService: apiService,
         realtimeService: realtimeService,

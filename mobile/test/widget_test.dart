@@ -4,19 +4,18 @@ import 'package:mobile/services/api_service.dart';
 import 'package:mobile/services/realtime_service.dart';
 
 void main() {
-  testWidgets('PropertyRiskApp loads and renders title', (WidgetTester tester) async {
+  testWidgets('PropertyGuard opens on the sign-in screen', (WidgetTester tester) async {
     final apiService = ApiService(baseUrl: 'http://localhost:5000');
-    final realtimeService = RealtimeService(api: apiService);
+    final realtimeService = RealtimeService(apiService);
 
     await tester.pumpWidget(PropertyRiskApp(
       apiService: apiService,
       realtimeService: realtimeService,
     ));
+    await tester.pump();
 
-    // Verify app renders with Property Risk Monitor
-    expect(find.text('MULTI-HAZARD SENSOR TELEMETRY'), findsOneWidget);
-    expect(find.text('SECURITY ARMING MODE'), findsOneWidget);
-
-    realtimeService.dispose();
+    expect(find.text('Sign In'), findsOneWidget);
+    expect(find.text('Monitor. Detect. Stay Safe.'), findsOneWidget);
+    await realtimeService.dispose();
   });
 }

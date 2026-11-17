@@ -2,80 +2,42 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { telemetryService } from '../../services/telemetryService';
 import { validateBody } from '../middlewares/validate';
+import { authenticateDeviceToken, authenticateToken, requireDeviceBodyScope, requireDeviceQueryAccess } from '../middlewares/auth';
 
 const router = Router();
-
+const metric = z.number().finite().optional();
 const ingestTelemetrySchema = z.object({
-  propertyId: z.string().min(1),
-  zoneId: z.string().min(1),
-  deviceId: z.string().min(1),
-  timestamp: z.number().optional(),
+  propertyId: z.string().min(1), zoneId: z.string().min(1), deviceId: z.string().min(1), timestamp: z.number().finite().optional(),
   metrics: z.object({
-    temperature: z.number().optional(),
-    humidity: z.number().optional(),
-    smoke_ppm: z.number().optional(),
-    gas_ppm: z.number().optional(),
-    flame_detected: z.boolean().optional(),
-    water_detected: z.boolean().optional(),
-    motion_detected: z.boolean().optional(),
-  }),
-  diagnostics: z
-    .object({
-      wifi_rssi: z.number().optional(),
-      uptime_seconds: z.number().optional(),
-      free_heap: z.number().optional(),
-    })
-    .optional(),
-});
+    temperature: metric, humidity: metric, smoke_ppm: metric, gas_ppm: metric,
+    flame_detected: z.boolean().optional(), water_detected: z.boolean().optional(), motion_detected: z.boolean().optional(),
+  }).strict(),
+  diagnostics: z.object({ wifi_rssi: z.number().int().optional(), uptime_seconds: z.number().nonnegative().optional(), free_heap: z.number().nonnegative().optional() }).strict().optional(),
+}).strict();
 
-// Latest telemetry
-router.get('/latest', async (req, res, next) => {
+router.get('/latest', authenticateToken, requireDeviceQueryAccess, async (req, res, next) => {
+  try { res.json((await telemetryService.getLatestReading(req.query.deviceId as string)) || {}); }
+  catch (err) { next(err); }
+});
+router.get('/history', authenticateToken, requireDeviceQueryAccess, async (req, res, next) => {
   try {
-    const deviceId = req.query.deviceId as string | undefined;
-    const latest = await telemetryService.getLatestReading(deviceId);
-    res.json(latest || {});
-  } catch (err) {
-    next(err);
-  }
+    const limit = req.query.limit ? Number(req.query.limit) : 100;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) { res.status(400).json({ error: 'limit must be an integer between 1 and 1000.' }); return; }
+    res.json(await telemetryService.getHistory(req.query.deviceId as string, limit));
+  } catch (err) { next(err); }
+});
+router.get('/rollups', authenticateToken, requireDeviceQueryAccess, async (req, res, next) => {
+  try { res.json(await telemetryService.getRollups(req.query.deviceId as string)); }
+  catch (err) { next(err); }
 });
 
-// Telemetry history
-router.get('/history', async (req, res, next) => {
-  try {
-    const deviceId = req.query.deviceId as string | undefined;
-    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
-    const history = await telemetryService.getHistory(deviceId, limit);
-    res.json(history);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Telemetry rollups
-router.get('/rollups', async (req, res, next) => {
-  try {
-    const deviceId = req.query.deviceId as string | undefined;
-    const rollups = await telemetryService.getRollups(deviceId);
-    res.json(rollups);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// HTTP telemetry ingestion fallback (e.g. if MQTT is blocked or firewalled)
-router.post('/ingest', validateBody(ingestTelemetrySchema), async (req, res, next) => {
+// Firmware fallback: X-Device-Token must map to the registered device and all
+// routed identifiers must match its currently assigned property and zone.
+router.post('/ingest', validateBody(ingestTelemetrySchema), authenticateDeviceToken, requireDeviceBodyScope, async (req, res, next) => {
   try {
     const { propertyId, zoneId, deviceId, timestamp, metrics, diagnostics } = req.body;
-    const reading = await telemetryService.ingestTelemetry(propertyId, zoneId, deviceId, {
-      deviceId,
-      timestamp,
-      metrics,
-      diagnostics,
-    });
+    const reading = await telemetryService.ingestTelemetry(propertyId, zoneId, deviceId, { deviceId, timestamp, metrics, diagnostics });
     res.status(201).json({ success: true, reading });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
-
 export default router;

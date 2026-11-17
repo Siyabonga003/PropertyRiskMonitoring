@@ -33,12 +33,14 @@ export class TelemetryService {
   ) {
     const recordedAt = packet.timestamp ? new Date(packet.timestamp * 1000) : new Date();
 
-    // 1. Ensure device exists and update last seen
-    await db.upsertDevice({
-      id: deviceId,
-      zoneId,
-      isOnline: true,
-    });
+    // The hardware identity must be enrolled and claimed first. Never trust
+    // client-supplied routing IDs to reassign a device to another property.
+    const device = await db.getDeviceById(deviceId);
+    const actualPropertyId = await db.getPropertyIdForDevice(deviceId);
+    if (!device || device.zoneId !== zoneId || actualPropertyId !== propertyId) {
+      throw new Error('Telemetry routing identifiers do not match the enrolled device assignment.');
+    }
+    await db.setDeviceOnlineStatus(deviceId, true);
 
     // 2. Persist reading
     const reading = await db.addTelemetryReading({

@@ -62,13 +62,24 @@ npm run dev
 ```
 Backend starts on `http://localhost:5000` with WebSocket support on the same port.
 
-### 4. Dashboard Setup
+### 4. Database Schema and Administrator Provisioning
+Apply the Prisma schema before first use (`npm run prisma:push` from `backend`). In production, set a unique `JWT_SECRET` of at least 32 characters, configure PostgreSQL, and provision the first administrator with `npm run admin:create` plus `ADMIN_EMAIL`, `ADMIN_PASSWORD` (16+ characters), and `ADMIN_NAME`. Production refuses in-memory storage and disables the development demo seed.
+
+### 5. Dashboard Setup
 ```bash
 cd ../dashboard
 npm install
 npm run dev
 ```
-Open `http://localhost:5173` in your browser.
+Open `http://localhost:5173` in your browser and set that origin in backend `CLIENT_URL`.
+
+### 6. Flutter Mobile
+```bash
+cd ../mobile
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5000
+```
+For FCM, supply the public Firebase app settings with `FCM_API_KEY`, `FCM_APP_ID`, `FCM_SENDER_ID`, and `FCM_PROJECT_ID` dart-defines and configure `FIREBASE_SERVICE_ACCOUNT_JSON` on the backend for sending. See [`mobile/README.md`](./mobile/README.md) and [`backend/README.md`](./backend/README.md) for access policies and device provisioning.
 
 ### 5. Run the Virtual ESP32 Simulator (Instant Hardware Test)
 No physical hardware needed for testing! From the backend directory:

@@ -6,8 +6,10 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>PropertyGuard uses the camera to scan ESP32 pairing QR codes.</string>
 	<key>CFBundleDisplayName</key>
-	<string>Mobile</string>
+	<string>PropertyGuard</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

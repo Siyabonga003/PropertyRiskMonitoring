@@ -4,7 +4,7 @@ import { mqttPublisher } from '../mqtt/publisher';
 import { IncidentStatus, HazardType, IncidentSeverity } from '@prisma/client';
 
 export class IncidentService {
-  public async getIncidents(filter?: { propertyId?: string; status?: IncidentStatus }) {
+  public async getIncidents(filter?: { propertyId?: string; propertyIds?: string[]; status?: IncidentStatus }) {
     return db.getIncidents(filter);
   }
 
