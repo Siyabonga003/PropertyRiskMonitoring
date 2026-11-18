@@ -42,12 +42,14 @@ jobs:
         continue-on-error: true
         run: dart format --output=none --set-exit-if-changed lib test 2>&1 | tee format.log
 
+      # Infos (e.g. deprecations that only apply to this newer SDK) are reported
+      # but do not fail the job; errors and warnings still do.
       - name: Analyze
         id: analyze
         continue-on-error: true
         run: |
           set -o pipefail
-          flutter analyze 2>&1 | tee analyze.log
+          flutter analyze --no-fatal-infos 2>&1 | tee analyze.log
 
       - name: Test
         id: test
