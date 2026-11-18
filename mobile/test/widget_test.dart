@@ -12,12 +12,18 @@ void main() {
       apiService: apiService,
       realtimeService: realtimeService,
     ));
-    // Session restore touches secure storage, which is unavailable in tests;
-    // pump a couple of frames so it fails fast and the sign-in screen renders.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
+    // Session restore talks to secure storage and the network; give those
+    // futures a chance to settle before asserting on the sign-in screen.
+    for (var i = 0; i < 40 && !tester.any(find.text('Sign In')); i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
 
-    expect(find.text('Sign In'), findsOneWidget);
+    expect(
+      find.text('Sign In'),
+      findsOneWidget,
+      reason: 'Visible text: '
+          '${tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList()}',
+    );
     expect(find.text('Monitor. Detect. Stay Safe.'), findsOneWidget);
     await realtimeService.dispose();
   });

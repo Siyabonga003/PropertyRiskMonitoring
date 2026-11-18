@@ -102,6 +102,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # The repository pins Gradle 9.1.0 for the locally installed Flutter SDK.
+      # Flutter stable in CI requires a newer Gradle, so the wrapper is aligned
+      # here for the duration of the run only; the checked-in value is unchanged.
+      - name: Align Gradle wrapper with CI Flutter
+        run: |
+          sed -i 's#^distributionUrl=.*#distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-all.zip#' \
+            android/gradle/wrapper/gradle-wrapper.properties
+          grep distributionUrl android/gradle/wrapper/gradle-wrapper.properties
+
       - name: Build debug APK
         id: build
         continue-on-error: true
