@@ -28,26 +28,60 @@ export async function seedDatabase(client?: PrismaClient) {
     });
     console.log(`[Seed] Admin user created/verified: ${admin.email}`);
 
-    // 2. Create or verify Property
+    // 2. Create or verify the demo Property Owner.
+    // Arming/disarming is restricted to a PROPERTY_OWNER who is the stored owner,
+    // so the demo property needs its own owner account (an ADMIN cannot arm it).
+    const ownerPasswordHash = await bcrypt.hash('owner123', 10);
+    const owner = await prisma.user.upsert({
+      where: { email: 'owner@example.com' },
+      update: { name: 'SET Facilities Owner', role: Role.PROPERTY_OWNER, passwordHash: ownerPasswordHash },
+      create: {
+        email: 'owner@example.com',
+        name: 'SET Facilities Owner',
+        role: Role.PROPERTY_OWNER,
+        passwordHash: ownerPasswordHash,
+      },
+    });
+    console.log(`[Seed] Property owner created/verified: ${owner.email}`);
+
+    // 3. Create or verify Property
+    const demoPropertyName = 'School of Engineering and Technology (SET)';
+    const demoPropertyAddress = 'School of Engineering and Technology, Great East Road Campus';
+
     let property = await prisma.property.findFirst({
-      where: { name: 'Sunset Villa Headquarters' },
+      where: { name: { in: [demoPropertyName, 'Sunset Villa Headquarters'] } },
     });
 
     if (!property) {
       property = await prisma.property.create({
         data: {
-          name: 'Sunset Villa Headquarters',
-          address: '742 Evergreen Terrace, Springfield',
+          name: demoPropertyName,
+          address: demoPropertyAddress,
           armingState: ArmingState.DISARMED,
+          ownerId: owner.id,
           users: {
-            connect: { id: admin.id },
+            connect: [{ id: admin.id }, { id: owner.id }],
+          },
+        },
+      });
+    } else if (property.ownerId !== owner.id || property.name !== demoPropertyName || property.address !== demoPropertyAddress) {
+      // Rename an existing demo installation in place so no duplicate property
+      // is created when the seed is re-run.
+      property = await prisma.property.update({
+        where: { id: property.id },
+        data: {
+          name: demoPropertyName,
+          address: demoPropertyAddress,
+          ownerId: owner.id,
+          users: {
+            connect: [{ id: admin.id }, { id: owner.id }],
           },
         },
       });
     }
     console.log(`[Seed] Property ready: ${property.name} (${property.id})`);
 
-    // 3. Create Zones
+    // 4. Create Zones
     const defaultZones = [
       {
         name: 'Kitchen',
@@ -101,7 +135,7 @@ export async function seedDatabase(client?: PrismaClient) {
       console.log(`[Seed] Zone ready: ${zone.name} (${zone.id})`);
     }
 
-    // 4. Create Demo Device ("ESP32_A1B2C3", token: "tok_esp32_dev_secret_001")
+    // 5. Create Demo Device ("ESP32_A1B2C3", token: "tok_esp32_dev_secret_001")
     const primaryZoneId = zoneMap['Kitchen'] || Object.values(zoneMap)[0];
     const device = await prisma.device.upsert({
       where: { id: 'ESP32_A1B2C3' },

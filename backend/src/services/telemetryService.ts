@@ -36,9 +36,20 @@ export class TelemetryService {
     // The hardware identity must be enrolled and claimed first. Never trust
     // client-supplied routing IDs to reassign a device to another property.
     const device = await db.getDeviceById(deviceId);
-    const actualPropertyId = await db.getPropertyIdForDevice(deviceId);
-    if (!device || device.zoneId !== zoneId || actualPropertyId !== propertyId) {
-      throw new Error('Telemetry routing identifiers do not match the enrolled device assignment.');
+    const enrolledPropertyId = await db.getPropertyIdForDevice(deviceId);
+    if (!device || !enrolledPropertyId) {
+      throw new Error(`Unknown device '${deviceId}'. Enroll and claim it before publishing telemetry.`);
+    }
+    if (device.zoneId !== zoneId || enrolledPropertyId !== propertyId) {
+      // Topic IDs are untrusted input. The enrolled assignment wins, so a node
+      // (or simulator) using stale placeholder IDs is still ingested correctly
+      // instead of having every packet dropped.
+      console.warn(
+        `[Telemetry] Topic route ${propertyId}/${zoneId} differs from enrolled assignment ` +
+        `${enrolledPropertyId}/${device.zoneId}; using the enrolled assignment.`
+      );
+      propertyId = enrolledPropertyId;
+      zoneId = device.zoneId;
     }
     await db.setDeviceOnlineStatus(deviceId, true);
 

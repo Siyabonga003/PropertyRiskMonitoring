@@ -28,10 +28,23 @@ export class MqttTopicHandler {
       if (messageType !== 'telemetry' && messageType !== 'alert') return;
 
       const device = await db.getDeviceById(deviceId);
-      const actualPropertyId = await db.getPropertyIdForDevice(deviceId);
-      if (!device || device.zoneId !== zoneId || actualPropertyId !== propertyId) {
-        console.warn(`[MQTT Handler] Dropped packet with unassigned topic route: ${topic}`);
+      const enrolledPropertyId = await db.getPropertyIdForDevice(deviceId);
+      if (!device || !enrolledPropertyId) {
+        console.warn(`[MQTT Handler] Dropped packet from unknown or unclaimed device: ${topic}`);
         return;
+      }
+      let routePropertyId = propertyId;
+      let routeZoneId = zoneId;
+      if (device.zoneId !== zoneId || enrolledPropertyId !== propertyId) {
+        // Never trust the wire: the enrolled assignment is authoritative. This
+        // keeps simulators and re-flashed nodes working with stale IDs while
+        // still preventing a device from posting into another property.
+        console.warn(
+          `[MQTT Handler] Topic route ${propertyId}/${zoneId} differs from enrolled assignment ` +
+          `${enrolledPropertyId}/${device.zoneId}; using the enrolled assignment.`
+        );
+        routePropertyId = enrolledPropertyId;
+        routeZoneId = device.zoneId;
       }
       const payload = JSON.parse(messageStr);
       if (payload.deviceId && payload.deviceId !== deviceId) {
@@ -39,9 +52,9 @@ export class MqttTopicHandler {
         return;
       }
       if (messageType === 'telemetry') {
-        await telemetryService.ingestTelemetry(propertyId, zoneId, deviceId, payload as RawTelemetryPacket);
+        await telemetryService.ingestTelemetry(routePropertyId, routeZoneId, deviceId, payload as RawTelemetryPacket);
       } else {
-        await alertEngine.evaluateExplicitAlert(propertyId, zoneId, deviceId, payload as HazardAlertPayload);
+        await alertEngine.evaluateExplicitAlert(routePropertyId, routeZoneId, deviceId, payload as HazardAlertPayload);
       }
     } catch (err: any) {
       console.error(`❌ [MQTT Handler] Error processing message on ${topic}:`, err.message);
