@@ -213,13 +213,46 @@ class _HomePage extends StatelessWidget {
   final Map<String, dynamic> user; final MonitoringSnapshot? snapshot; final String? error; final Map<String, dynamic>? property; final ValueChanged<String> onSelectProperty; final VoidCallback onViewSensors; final VoidCallback? onOpenPair; final Future<void> Function(Map<String, dynamic>) onAck; final Future<void> Function() onRefresh;
   const _HomePage({required this.user, required this.snapshot, required this.error, required this.property, required this.onSelectProperty, required this.onViewSensors, required this.onOpenPair, required this.onAck, required this.onRefresh});
   @override Widget build(BuildContext context) {
-    final props = snapshot?.properties ?? const <Map<String, dynamic>>[]; final devices = _propertyDevices(snapshot, property); final incidents = (snapshot?.incidents ?? const <Map<String, dynamic>>[]).where((a) => a['propertyId']?.toString() == property?['id']?.toString() && a['status']?.toString() == 'ACTIVE').toList();
+    final props = snapshot?.properties ?? const <Map<String, dynamic>>[];
+    final currentPropertyId = property == null ? null : property['id']?.toString();
+    final selectedProperty = props.isEmpty
+        ? null
+        : props.firstWhere(
+            (p) => currentPropertyId != null && p['id']?.toString() == currentPropertyId,
+            orElse: () => props.first,
+          );
+    final selectedPropertyId = selectedProperty == null
+        ? null
+        : selectedProperty['id']?.toString();
+    final devices = _propertyDevices(snapshot, property);
+    final incidents = (snapshot?.incidents ?? const <Map<String, dynamic>>[])
+        .where((a) =>
+            a['propertyId']?.toString() == currentPropertyId &&
+            a['status']?.toString() == 'ACTIVE')
+        .toList();
     final critical = incidents.any((a) => a['severity'] == 'CRITICAL'); final warning = incidents.isNotEmpty; final status = critical ? 'CRITICAL_HAZARD' : warning ? 'WARNING' : 'SAFE'; final statusColor = critical ? AppColors.danger : warning ? AppColors.warning : AppColors.primary;
     return RefreshIndicator(color: AppColors.primary, onRefresh: onRefresh, child: ListView(padding: const EdgeInsets.fromLTRB(20, 20, 20, 30), children: [
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Hello, ${_firstName(user['name']?.toString())}', style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w600)), const SizedBox(height: 4), Text('${user['name'] ?? ''}  ·  ${user['role'] ?? 'Account'}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary))])), const Text('PROPERTYGUARD', style: TextStyle(fontSize: 10, letterSpacing: 1.4, color: AppColors.muted, fontWeight: FontWeight.w600))]),
       if (error != null) ...[const SizedBox(height: 14), Text(error!, style: const TextStyle(color: AppColors.warning, fontSize: 12))],
       const SizedBox(height: 22),
-      if (props.isNotEmpty) DropdownButtonFormField<String>(value: props.any((p) => p['id'].toString() == property?['id']?.toString()) ? property?['id']?.toString() : props.first['id'].toString(), dropdownColor: AppColors.surface, decoration: const InputDecoration(labelText: 'Selected property'), items: props.map((p) => DropdownMenuItem(value: p['id'].toString(), child: Text(p['name']?.toString() ?? 'Property', overflow: TextOverflow.ellipsis))).toList(), onChanged: (v) { if (v != null) onSelectProperty(v); }),
+      if (props.isNotEmpty)
+        DropdownButtonFormField<String>(
+          value: selectedPropertyId,
+          dropdownColor: AppColors.surface,
+          decoration: const InputDecoration(labelText: 'Selected property'),
+          items: props
+              .map((p) => DropdownMenuItem<String>(
+                    value: p['id'].toString(),
+                    child: Text(
+                      p['name']?.toString() ?? 'Property',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ))
+              .toList(),
+          onChanged: (value) {
+            if (value != null) onSelectProperty(value);
+          },
+        ),
       if (property != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${property!['address'] ?? 'Address not provided'}  ·  ${devices.where((d) => d['isOnline'] == true).length}/${devices.length} Online', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
       const SizedBox(height: 20),
       _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('PROPERTY STATUS', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1)), const SizedBox(height: 15), Row(children: [_StatusDot(color: statusColor), const SizedBox(width: 9), Expanded(child: Text(status, style: TextStyle(color: statusColor, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: .4)))]), const SizedBox(height: 9), Text(critical ? 'Immediate attention required' : warning ? 'An active hazard needs review' : 'All systems operating normally', style: const TextStyle(color: AppColors.textSecondary, fontSize: 14))])),
@@ -338,16 +371,133 @@ class _AccessPageState extends State<_AccessPage> {
     on ApiException catch (e) { _error = e.message; }
     finally { if (mounted) setState(() => _loading = false); }
   }
-  @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Property Access')), body: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 28), children: [
-    _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(widget.property?['name']?.toString() ?? 'No property selected', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)), const SizedBox(height: 7), Text(widget.property?['address']?.toString() ?? 'Address not provided', style: const TextStyle(color: AppColors.textSecondary, fontSize: 14))])),
-    const SizedBox(height: 24), const Text('Authorized Delegates', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600)), const SizedBox(height: 12),
-    if (_loading) const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: AppColors.primary)))
-    else if (_error != null) _EmptyState(title: 'Could not load delegates', message: _error!)
-    else if (_delegates.isEmpty) const _EmptyState(title: 'No authorized delegates', message: 'Add a registered account to share monitoring access.')
-    else ..._delegates.map((delegate) => Padding(padding: const EdgeInsets.only(bottom: 10), child: _Card(child: Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(delegate['name']?.toString() ?? 'Account', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)), const SizedBox(height: 4), Text(delegate['email']?.toString() ?? '', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)), const SizedBox(height: 7), const Text('ACTIVE', style: TextStyle(color: AppColors.primary, fontSize: 10, letterSpacing: .6, fontWeight: FontWeight.w600))])), TextButton(onPressed: () => _revoke(delegate), style: TextButton.styleFrom(foregroundColor: AppColors.danger), child: const Text('Revoke'))]))),
-    if (widget.owner) ...[const SizedBox(height: 10), ElevatedButton(onPressed: _loading ? null : _add, child: const Text('Add Delegate'))] else const Padding(padding: EdgeInsets.only(top: 16), child: Text('Access management is limited to authorized property owners.', style: TextStyle(color: AppColors.muted, fontSize: 12))),
-    const SizedBox(height: 16), const Text('Delegates can view property alerts and sensor readings but cannot add properties, pair devices or manage access permissions.', style: TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.5)),
-  ]));
+
+  Widget _delegateCard(Map<String, dynamic> delegate) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: _Card(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    delegate['name']?.toString() ?? 'Account',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    delegate['email']?.toString() ?? '',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  const Text(
+                    'ACTIVE',
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontSize: 10,
+                      letterSpacing: .6,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => _revoke(delegate),
+              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+              child: const Text('Revoke'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Property Access')),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          children: [
+            _Card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.property?['name']?.toString() ?? 'No property selected',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    widget.property?['address']?.toString() ?? 'Address not provided',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Authorized Delegates',
+              style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            if (_loading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              )
+            else if (_error != null)
+              _EmptyState(title: 'Could not load delegates', message: _error!)
+            else if (_delegates.isEmpty)
+              const _EmptyState(
+                title: 'No authorized delegates',
+                message: 'Add a registered account to share monitoring access.',
+              )
+            else ...[
+              for (final delegate in _delegates) _delegateCard(delegate),
+            ],
+            if (widget.owner) ...[
+              const SizedBox(height: 10),
+              ElevatedButton(
+                onPressed: _loading ? null : _add,
+                child: const Text('Add Delegate'),
+              ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.only(top: 16),
+                child: Text(
+                  'Access management is limited to authorized property owners.',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 16),
+            const Text(
+              'Delegates can view property alerts and sensor readings but cannot add properties, pair devices or manage access permissions.',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      );
 
   Future<void> _add() async {
     final email = TextEditingController();
