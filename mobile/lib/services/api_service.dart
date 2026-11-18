@@ -60,7 +60,7 @@ class ApiService {
         response = await http.get(uri, headers: headers).timeout(ApiConfig.requestTimeout);
       }
     } on Exception catch (e) {
-      throw ApiException('Could not reach PropertyGuard services. Check your connection and API URL. ($e)');
+      throw ApiException('Could not reach PropertyGuard services at $uri. Check that the backend is running, that this address is correct, and that the network allows it. ($e)');
     }
 
     dynamic payload;
