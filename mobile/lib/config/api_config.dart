@@ -1,6 +1,13 @@
 /// API endpoints for local Android emulator, physical devices, or deployment.
-/// Override at build time with:
-/// flutter run --dart-define=API_BASE_URL=https://api.example.com
+///
+/// The default targets the Android emulator, where 10.0.2.2 is the host machine.
+/// A physical phone needs the computer's LAN address instead, passed at build time:
+///   flutter build apk --debug --dart-define=API_BASE_URL=http://192.168.1.20:5000
+/// or for a run session:
+///   flutter run --dart-define=API_BASE_URL=http://192.168.1.20:5000
+///
+/// Do not edit the default below: it is what the emulator uses, and a hard-coded
+/// LAN address stops working as soon as the network changes.
 class ApiConfig {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
