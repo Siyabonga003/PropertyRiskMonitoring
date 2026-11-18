@@ -214,7 +214,10 @@ class _HomePage extends StatelessWidget {
   const _HomePage({required this.user, required this.snapshot, required this.error, required this.property, required this.onSelectProperty, required this.onViewSensors, required this.onOpenPair, required this.onAck, required this.onRefresh});
   @override Widget build(BuildContext context) {
     final props = snapshot?.properties ?? const <Map<String, dynamic>>[];
-    final currentPropertyId = property == null ? null : property['id']?.toString();
+    final selectedPropertyMap = property;
+    final currentPropertyId = selectedPropertyMap == null
+        ? null
+        : selectedPropertyMap['id']?.toString();
     final selectedProperty = props.isEmpty
         ? null
         : props.firstWhere(
