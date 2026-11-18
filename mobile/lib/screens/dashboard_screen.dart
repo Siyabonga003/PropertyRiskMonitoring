@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../models/incident.dart';
 import '../services/api_service.dart';
 import '../services/realtime_service.dart';
 import '../services/fcm_registration_service.dart';
@@ -214,10 +213,7 @@ class _HomePage extends StatelessWidget {
   const _HomePage({required this.user, required this.snapshot, required this.error, required this.property, required this.onSelectProperty, required this.onViewSensors, required this.onOpenPair, required this.onAck, required this.onRefresh});
   @override Widget build(BuildContext context) {
     final props = snapshot?.properties ?? const <Map<String, dynamic>>[];
-    final selectedPropertyMap = property;
-    final currentPropertyId = selectedPropertyMap == null
-        ? null
-        : selectedPropertyMap['id']?.toString();
+    final currentPropertyId = property?['id']?.toString();
     final selectedProperty = props.isEmpty
         ? null
         : props.firstWhere(
@@ -287,7 +283,7 @@ class _AlertsPageState extends State<_AlertsPage> {
   String _filter = 'All'; String? _property;
   @override Widget build(BuildContext context) {
     final rows = widget.incidents.where((item) {
-      final severity = item['severity']?.toString(); final status = item['status']?.toString();
+      final severity = item['severity']?.toString();
       final matchesSeverity = _filter == 'All' || (_filter == 'Warning' ? severity == 'WARNING' : severity == 'CRITICAL');
       return matchesSeverity && (_property == null || item['propertyId']?.toString() == _property);
     }).toList()..sort((a,b) => _date(b['startedAt']).compareTo(_date(a['startedAt'])));
