@@ -12,6 +12,16 @@ const ALERT_TOPIC = `properties/${PROPERTY_ID}/zones/${ZONE_ID}/devices/${DEVICE
 const STATUS_TOPIC = `devices/${DEVICE_ID}/status`;
 const COMMAND_TOPIC = `devices/${DEVICE_ID}/commands`;
 
+// Sensors can be driven without a TTY: `npm run simulate -- f n g n` or
+// SIMULATE_SEQUENCE=f,g,s,w,n. Each step waits SIMULATE_STEP_MS (default 6s) so
+// the 5s telemetry loop reports the new state before the next key runs.
+const scriptedSequence = (process.env.SIMULATE_SEQUENCE ?? process.argv.slice(2).join(','))
+  .split(',')
+  .map((key) => key.trim().toLowerCase())
+  .filter((key) => key.length > 0);
+const scriptedStepMs = Number(process.env.SIMULATE_STEP_MS ?? 6000);
+const keepAliveAfterSequence = process.env.SIMULATE_KEEP_ALIVE === '1';
+
 // Sensor states
 let temperature = 22.5;
 let humidity = 45.0;
@@ -31,6 +41,9 @@ console.log(`Device ID:    ${DEVICE_ID}`);
 console.log(`Property ID:  ${PROPERTY_ID}`);
 console.log(`Zone ID:      ${ZONE_ID}`);
 console.log(`Broker URL:   ${BROKER_URL}`);
+console.log('The backend resolves the property/zone from the enrolled device, so the');
+console.log('placeholder IDs above are only fallbacks. Override with PROPERTY_ID, ZONE_ID');
+console.log('and DEVICE_ID if this node was paired as a different device.');
 console.log('-'.repeat(65));
 console.log('Interactive Keystrokes:');
 console.log('  [f] -> Trigger Active Open Flame / Fire Incident & Alert');
@@ -41,6 +54,16 @@ console.log('  [m] -> Trigger Motion Event & Alert');
 console.log('  [n] -> Normalize all sensors to nominal safe levels');
 console.log('  [b] -> Test Local Buzzer Trigger');
 console.log('  [q] -> Disconnect & Quit');
+console.log('-'.repeat(65));
+console.log('Motion is an intrusion event: the backend only raises it while the');
+console.log('property is ARMED_HOME (warning) or ARMED_AWAY (critical). Arm it from the');
+console.log('app first, otherwise [m] is intentionally ignored.');
+console.log('After [n], incidents are auto-resolved once two consecutive safe packets');
+console.log('arrive (~10s), so the next spike creates a fresh incident.');
+console.log('-'.repeat(65));
+console.log('Scripted (non-interactive) mode:');
+console.log('  npm run simulate -- f n g n s n w n m n');
+console.log('  SIMULATE_SEQUENCE=f,g,s,w,n npm run simulate');
 console.log('='.repeat(65));
 
 const client: MqttClient = mqtt.connect(BROKER_URL, {
@@ -76,6 +99,10 @@ client.on('connect', () => {
   // Start periodic telemetry reporting (every 5 seconds)
   setInterval(publishTelemetry, 5000);
   publishTelemetry();
+
+  if (scriptedSequence.length > 0) {
+    void runScriptedSequence(scriptedSequence);
+  }
 });
 
 client.on('message', (topic, message) => {
@@ -255,6 +282,56 @@ function normalizeSensors() {
   publishTelemetry();
 }
 
+function handleKey(rawKey: string | undefined) {
+  switch (rawKey?.toLowerCase()) {
+    case 'f':
+      triggerFlameAlert();
+      return true;
+    case 'g':
+      triggerGasAlert();
+      return true;
+    case 's':
+      triggerSmokeAlert();
+      return true;
+    case 'w':
+      triggerWaterAlert();
+      return true;
+    case 'm':
+      triggerMotionAlert();
+      return true;
+    case 'n':
+      normalizeSensors();
+      return true;
+    case 'b':
+      buzzerActive = !buzzerActive;
+      console.log(`\n🔊 Buzzer manual toggle: ${buzzerActive ? 'ON' : 'OFF'}`);
+      return true;
+    case 'q':
+      cleanupAndExit();
+      return true;
+    default:
+      return false;
+  }
+}
+
+async function runScriptedSequence(sequence: string[]) {
+  console.log(`\n▶ [Simulator] Running scripted sequence: ${sequence.join(' -> ')}`);
+  for (const key of sequence) {
+    if (key === 'q') {
+      cleanupAndExit();
+      return;
+    }
+    const handled = handleKey(key);
+    if (!handled) console.warn(`⚠ [Simulator] Ignoring unknown step '${key}'.`);
+    await new Promise((resolve) => setTimeout(resolve, scriptedStepMs));
+  }
+
+  if (!keepAliveAfterSequence) {
+    console.log('✔ [Simulator] Sequence complete. Disconnecting (set SIMULATE_KEEP_ALIVE=1 to stay connected).');
+    cleanupAndExit();
+  }
+}
+
 // Handle interactive keyboard input
 if (process.stdin.isTTY) {
   readline.emitKeypressEvents(process.stdin);
@@ -265,36 +342,11 @@ if (process.stdin.isTTY) {
       cleanupAndExit();
       return;
     }
-
-    switch (key.name?.toLowerCase()) {
-      case 'f':
-        triggerFlameAlert();
-        break;
-      case 'g':
-        triggerGasAlert();
-        break;
-      case 's':
-        triggerSmokeAlert();
-        break;
-      case 'w':
-        triggerWaterAlert();
-        break;
-      case 'm':
-        triggerMotionAlert();
-        break;
-      case 'n':
-        normalizeSensors();
-        break;
-      case 'b':
-        buzzerActive = !buzzerActive;
-        console.log(`\n🔊 Buzzer manual toggle: ${buzzerActive ? 'ON' : 'OFF'}`);
-        break;
-      case 'q':
-        cleanupAndExit();
-        break;
+    if (!handleKey(key.name)) {
+      if (key.name) console.log(`\n(No simulator action bound to '${key.name}'.)`);
     }
   });
-} else {
+} else if (scriptedSequence.length === 0) {
   console.log('(Running in non-interactive terminal mode. Keystroke triggers disabled.)');
 }
 

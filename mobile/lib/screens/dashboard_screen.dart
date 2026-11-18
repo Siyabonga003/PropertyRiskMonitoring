@@ -99,6 +99,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) setState(() { _user = null; _snapshot = null; _tab = 0; });
   }
 
+  Future<void> _setArming(String armingState) async {
+    final id = _propertyId ?? _property?['id']?.toString();
+    if (id == null) { _toast('Select a property first.'); return; }
+    try {
+      await widget.apiService.updateArmingState(id, armingState);
+      await widget.realtimeService.refresh();
+      _toast(_armingLabel(armingState) == null ? 'Security mode updated.' : 'Security mode: ${_armingLabel(armingState)}');
+    } on ApiException catch (e) { _toast(e.message); }
+  }
+
   Future<void> _acknowledge(Map<String, dynamic> item) async {
     try {
       final updated = await widget.apiService.acknowledge(item['id'].toString());
@@ -141,7 +151,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: _ErrorState(message: _error!, retry: () => widget.realtimeService.start()));
     }
     final pages = [
-      _HomePage(user: _user!, snapshot: _snapshot, error: _error, property: _property, onSelectProperty: (id) => setState(() => _propertyId = id), onViewSensors: () => _push(_SensorsPage(snapshot: _snapshot, property: _property)), onOpenPair: _owner ? () => _push(_PairPage(api: widget.apiService, properties: _snapshot?.properties ?? const [])) : null, onAck: _acknowledge, onRefresh: widget.realtimeService.refresh),
+      _HomePage(user: _user!, snapshot: _snapshot, error: _error, property: _property, onSelectProperty: (id) => setState(() => _propertyId = id), onViewSensors: () => _push(_SensorsPage(snapshot: _snapshot, property: _property)), onOpenPair: _owner ? () => _push(_PairPage(api: widget.apiService, properties: _snapshot?.properties ?? const [])) : null, onAck: _acknowledge, onRefresh: widget.realtimeService.refresh, onSetArming: _setArming),
       _AlertsPage(incidents: _snapshot?.incidents ?? const [], properties: _snapshot?.properties ?? const [], onAck: _acknowledge),
       _SettingsPage(user: _user!, owner: _owner, onSignOut: _signOut, onManageAccess: () => _push(_AccessPage(api: widget.apiService, property: _property, owner: _owner)), onAddProperty: _owner ? () => _addProperty() : null, notifications: _notifications, onNotifications: _setNotifications),
     ];
@@ -209,8 +219,8 @@ class _AuthScreenState extends State<_AuthScreen> {
 }
 
 class _HomePage extends StatelessWidget {
-  final Map<String, dynamic> user; final MonitoringSnapshot? snapshot; final String? error; final Map<String, dynamic>? property; final ValueChanged<String> onSelectProperty; final VoidCallback onViewSensors; final VoidCallback? onOpenPair; final Future<void> Function(Map<String, dynamic>) onAck; final Future<void> Function() onRefresh;
-  const _HomePage({required this.user, required this.snapshot, required this.error, required this.property, required this.onSelectProperty, required this.onViewSensors, required this.onOpenPair, required this.onAck, required this.onRefresh});
+  final Map<String, dynamic> user; final MonitoringSnapshot? snapshot; final String? error; final Map<String, dynamic>? property; final ValueChanged<String> onSelectProperty; final VoidCallback onViewSensors; final VoidCallback? onOpenPair; final Future<void> Function(Map<String, dynamic>) onAck; final Future<void> Function() onRefresh; final Future<void> Function(String) onSetArming;
+  const _HomePage({required this.user, required this.snapshot, required this.error, required this.property, required this.onSelectProperty, required this.onViewSensors, required this.onOpenPair, required this.onAck, required this.onRefresh, required this.onSetArming});
   @override Widget build(BuildContext context) {
     final props = snapshot?.properties ?? const <Map<String, dynamic>>[];
     final currentPropertyId = property?['id']?.toString();
@@ -255,6 +265,7 @@ class _HomePage extends StatelessWidget {
       if (property != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${property!['address'] ?? 'Address not provided'}  ·  ${devices.where((d) => d['isOnline'] == true).length}/${devices.length} Online', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
       const SizedBox(height: 20),
       _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('PROPERTY STATUS', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1)), const SizedBox(height: 15), Row(children: [_StatusDot(color: statusColor), const SizedBox(width: 9), Expanded(child: Text(status, style: TextStyle(color: statusColor, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: .4)))]), const SizedBox(height: 9), Text(critical ? 'Immediate attention required' : warning ? 'An active hazard needs review' : 'All systems operating normally', style: const TextStyle(color: AppColors.textSecondary, fontSize: 14))])),
+      if (selectedProperty != null) ...[const SizedBox(height: 14), _ArmingCard(current: selectedProperty['armingState']?.toString() ?? 'DISARMED', onSelect: onSetArming)],
       if (incidents.isNotEmpty) ...[const SizedBox(height: 14), _ActiveAlert(item: incidents.first, onAck: () => onAck(incidents.first))],
       const SizedBox(height: 26), Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Sensors Overview', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600)), TextButton(onPressed: onViewSensors, child: const Text('View All'))]), const SizedBox(height: 10),
       if (devices.isEmpty) _EmptyState(title: 'No sensors connected', message: 'Paired devices will appear here when available.') else ...devices.take(3).map((d) => Padding(padding: const EdgeInsets.only(bottom: 11), child: _DeviceOverviewCard(device: d, reading: snapshot?.readings[d['id']?.toString()]))),
@@ -558,6 +569,64 @@ class _StatusDot extends StatelessWidget { final Color color; final double size;
 class _MetricMini extends StatelessWidget { final String label; final dynamic value; final Color? color; const _MetricMini({required this.label, required this.value, this.color}); @override Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 10, letterSpacing: .6)), const SizedBox(height: 5), Text(value is num ? value.toDouble().toStringAsFixed(1) : value?.toString() ?? '—', style: TextStyle(color: color ?? AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600))]); }
 class _InfoLine extends StatelessWidget { final String label, value; const _InfoLine({required this.label, required this.value}); @override Widget build(BuildContext context) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 110, child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))), Expanded(child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)))]); }
 class _SettingsAction extends StatelessWidget { final String title; final VoidCallback? onTap; const _SettingsAction({required this.title, this.onTap}); @override Widget build(BuildContext context) => InkWell(onTap: onTap, child: Container(height: 50, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))), child: Row(children: [Expanded(child: Text(title, style: TextStyle(color: onTap == null ? AppColors.textSecondary : AppColors.textPrimary, fontSize: 14))), const Text('Open', style: TextStyle(color: AppColors.muted, fontSize: 12))]))); }
+String? _armingLabel(String state) => switch (state) {
+  'DISARMED' => 'Disarmed',
+  'ARMED_HOME' => 'Armed · Home',
+  'ARMED_AWAY' => 'Armed · Away',
+  _ => null,
+};
+
+/// Owner controls for the intrusion system: disarm, arm while at home, or arm
+/// away when the property will be empty. Armed-away makes motion an intrusion,
+/// armed-home keeps motion as a warning, and disarmed ignores motion entirely.
+class _ArmingCard extends StatelessWidget {
+  final String current;
+  final Future<void> Function(String) onSelect;
+  const _ArmingCard({required this.current, required this.onSelect});
+  @override
+  Widget build(BuildContext context) {
+    final options = <(String, String, String)>[
+      ('DISARMED', 'Disarm', 'Motion ignored'),
+      ('ARMED_HOME', 'Arm Home', 'Motion warning'),
+      ('ARMED_AWAY', 'Arm Away', 'Motion critical'),
+    ];
+    return _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Text('SECURITY MODE', style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 1)),
+        const Spacer(),
+        Text(_armingLabel(current) ?? current, style: TextStyle(color: current == 'DISARMED' ? AppColors.muted : AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600)),
+      ]),
+      const SizedBox(height: 13),
+      Row(children: options.map((option) {
+        final (value, label, hint) = option;
+        final active = current == value;
+        return Expanded(child: Padding(
+          padding: EdgeInsets.only(right: value == 'ARMED_AWAY' ? 0 : 9),
+          child: InkWell(
+            onTap: active ? null : () => onSelect(value),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
+              decoration: BoxDecoration(
+                color: active ? AppColors.primary.withValues(alpha: .14) : AppColors.surfaceRaised,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: active ? AppColors.primary : AppColors.border),
+              ),
+              child: Column(children: [
+                Text(label, textAlign: TextAlign.center, style: TextStyle(color: active ? AppColors.primary : AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 3),
+                Text(hint, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted, fontSize: 10)),
+              ]),
+            ),
+          ),
+        ));
+      }).toList()),
+      const SizedBox(height: 10),
+      const Text('Only the property owner can change the security mode.', style: TextStyle(color: AppColors.muted, fontSize: 11)),
+    ]));
+  }
+}
+
 class _EmptyState extends StatelessWidget { final String title, message; const _EmptyState({required this.title, required this.message}); @override Widget build(BuildContext context) => _Card(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)), const SizedBox(height: 6), Text(message, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.45))])); }
 class _ErrorState extends StatelessWidget { final String message; final VoidCallback retry; const _ErrorState({required this.message, required this.retry}); @override Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(message, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.textSecondary)), const SizedBox(height: 16), TextButton(onPressed: retry, child: const Text('Try again'))]))); }
 

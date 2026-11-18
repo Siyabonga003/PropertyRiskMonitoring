@@ -26,6 +26,10 @@ export interface HazardAlertPayload {
 }
 
 export class AlertEngine {
+  /** Consecutive clear telemetry packets required before an incident is auto-resolved. */
+  private static readonly CLEAR_READINGS_TO_RESOLVE = 2;
+  private readonly clearStreaks = new Map<string, number>();
+
   /**
    * Evaluates periodic telemetry readings against safety thresholds and arming state
    */
@@ -169,6 +173,19 @@ export class AlertEngine {
         });
       }
     }
+
+    // --- RECONCILE: close incidents whose hazard has cleared ---
+    // Without this, an incident stays open forever, deduplication suppresses
+    // every later spike of the same hazard, and the app looks "stuck" on the
+    // first event even after the sensors return to a safe baseline.
+    await this.reconcileClearedHazards(deviceId, {
+      [HazardType.FLAME]: metrics.flame_detected === true,
+      [HazardType.GAS_LEAK]: metrics.gas_ppm != null && metrics.gas_ppm >= warningGasPpm,
+      [HazardType.SMOKE]: metrics.smoke_ppm != null && metrics.smoke_ppm >= warningSmokePpm,
+      [HazardType.WATER_LEAK]: metrics.water_detected === true,
+      [HazardType.HIGH_TEMP]: metrics.temperature != null && metrics.temperature >= maxTemp,
+      [HazardType.LOW_TEMP]: metrics.temperature != null && metrics.temperature <= minTemp,
+    });
   }
 
   /**
@@ -181,9 +198,20 @@ export class AlertEngine {
     alertPayload: HazardAlertPayload
   ) {
     const device = await db.getDeviceById(deviceId);
-    const actualPropertyId = await db.getPropertyIdForDevice(deviceId);
-    if (!device || device.zoneId !== zoneId || actualPropertyId !== propertyId) {
-      throw new Error('Alert routing identifiers do not match the enrolled device assignment.');
+    const enrolledPropertyId = await db.getPropertyIdForDevice(deviceId);
+    if (!device || !enrolledPropertyId) {
+      throw new Error(`Unknown device '${deviceId}'. Enroll and claim it before publishing alerts.`);
+    }
+    if (device.zoneId !== zoneId || enrolledPropertyId !== propertyId) {
+      // Routing IDs from the wire are advisory only: the enrolled assignment is
+      // authoritative, so a simulator or re-flashed node with stale IDs still
+      // reaches the right property instead of being silently dropped.
+      console.warn(
+        `[Alert Engine] Alert topic route ${propertyId}/${zoneId} differs from enrolled assignment ` +
+        `${enrolledPropertyId}/${device.zoneId}; using the enrolled assignment.`
+      );
+      propertyId = enrolledPropertyId;
+      zoneId = device.zoneId;
     }
     let hazardType: HazardType;
     const rawType = (alertPayload.hazardType || '').toUpperCase();
@@ -232,6 +260,47 @@ export class AlertEngine {
       readingValue: alertPayload.value,
       details: alertPayload.message || `Interrupt alert triggered for ${hazardType}`,
     });
+  }
+
+  /**
+   * Resolves open incidents for environmental hazards that are no longer present.
+   * A hazard must read clear for consecutive packets before an incident is closed
+   * so that one glitched packet cannot silently clear a genuine alarm.
+   */
+  private async reconcileClearedHazards(
+    deviceId: string,
+    activeHazards: Partial<Record<HazardType, boolean>>
+  ) {
+    for (const [hazardType, active] of Object.entries(activeHazards) as [HazardType, boolean][]) {
+      const streakKey = `${deviceId}:${hazardType}`;
+      if (active) {
+        this.clearStreaks.delete(streakKey);
+        continue;
+      }
+
+      const streak = (this.clearStreaks.get(streakKey) ?? 0) + 1;
+      this.clearStreaks.set(streakKey, streak);
+      if (streak < AlertEngine.CLEAR_READINGS_TO_RESOLVE) continue;
+
+      const open = await db.getActiveIncidentByHazard(deviceId, hazardType);
+      if (!open) {
+        this.clearStreaks.delete(streakKey);
+        continue;
+      }
+
+      const resolved = await db.resolveIncident(open.id);
+      this.clearStreaks.delete(streakKey);
+      if (!resolved) continue;
+
+      console.log(
+        `✅ [ALERT ENGINE] Auto-resolved ${resolved.hazardType} incident ${resolved.id} ` +
+        `on device ${deviceId} — readings back within safe limits.`
+      );
+      socketEmitter.emitIncidentResolved(resolved.propertyId, resolved);
+      if (resolved.severity === IncidentSeverity.CRITICAL) {
+        await mqttPublisher.silenceBuzzer(deviceId).catch(() => false);
+      }
+    }
   }
 
   /**

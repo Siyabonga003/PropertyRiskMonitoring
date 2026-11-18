@@ -81,16 +81,43 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5000
 ```
 For FCM, supply the public Firebase app settings with `FCM_API_KEY`, `FCM_APP_ID`, `FCM_SENDER_ID`, and `FCM_PROJECT_ID` dart-defines and configure `FIREBASE_SERVICE_ACCOUNT_JSON` on the backend for sending. See [`mobile/README.md`](./mobile/README.md) and [`backend/README.md`](./backend/README.md) for access policies and device provisioning.
 
-### 5. Run the Virtual ESP32 Simulator (Instant Hardware Test)
+### 7. Demo Accounts
+The development seed (`npm run seed`) creates two accounts on the
+**School of Engineering and Technology (SET)** demo property:
+
+| Email | Password | Role | Can arm/disarm |
+| :--- | :--- | :--- | :--- |
+| `owner@example.com` | `owner123` | Property owner (facilities) | Yes |
+| `admin@example.com` | `admin123` | System administrator | No — admin oversight only |
+
+Self-registration in the app creates additional `PROPERTY_OWNER` accounts.
+
+### 8. Run the Virtual ESP32 Simulator (Instant Hardware Test)
 No physical hardware needed for testing! From the backend directory:
 ```bash
 cd backend
 npm run simulate
 ```
-- Press `[s]` to trigger a smoke spike (>600 PPM)
+- Press `[f]` to trigger an open-flame/fire incident
+- Press `[g]` to trigger a combustible gas spike (380 PPM)
+- Press `[s]` to trigger a smoke spike (680 PPM)
 - Press `[w]` to simulate a water leak event
-- Press `[m]` to simulate unauthorized motion (triggers alarm when Armed)
+- Press `[m]` to simulate motion (only raises an incident while armed)
 - Press `[n]` to normalize all sensors to safe conditions
+
+Sensors can also be driven without a TTY, which is useful for demos and CI:
+```bash
+npm run simulate -- f n g n s n w n   # each step 6s apart, then exits
+SIMULATE_SEQUENCE=f,g,s,w,n SIMULATE_STEP_MS=4000 npm run simulate
+```
+
+The backend resolves property and zone IDs from the enrolled device, so the
+simulator's placeholder `PROPERTY_ID`/`ZONE_ID` values are safe to leave alone.
+
+Normalising closes an incident after two consecutive safe packets (~10s), and
+the disarming command also silences the buzzer. Until the incident is closed,
+further spikes of the same hazard are deduplicated, which is why the app can
+appear "stuck" if a hazard is never normalised.
 
 ---
 

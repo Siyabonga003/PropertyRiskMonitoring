@@ -4,8 +4,8 @@ import type { ChartDataPoint } from '../types/telemetry';
 
 export const INITIAL_PROPERTY: Property = {
   id: 'prop-sunset-hq',
-  name: 'Sunset Villa Headquarters',
-  address: '1042 Ocean View Blvd, Malibu, CA',
+  name: 'School of Engineering and Technology (SET)',
+  address: 'School of Engineering and Technology, Great East Road Campus',
   armingState: 'ARMED_AWAY',
   zones: [
     {

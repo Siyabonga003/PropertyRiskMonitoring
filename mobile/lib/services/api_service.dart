@@ -160,6 +160,17 @@ class ApiService {
     }) as Map);
   }
 
+  /// Arms or disarms a property. The backend accepts DISARMED, ARMED_HOME
+  /// (owner at home) and ARMED_AWAY (owner away); it enforces that only the
+  /// property owner may change it.
+  Future<Map<String, dynamic>> updateArmingState(String propertyId, String armingState) async {
+    return Map<String, dynamic>.from(await _request(
+      'PATCH',
+      '/api/properties/$propertyId/arming',
+      body: {'armingState': armingState},
+    ) as Map);
+  }
+
   Future<bool> notificationPreference() async => await _storage.read(key: 'propertyguard.notifications') == 'true';
 
   Future<void> updateNotificationPreference(bool enabled) async {

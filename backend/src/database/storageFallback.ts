@@ -120,19 +120,34 @@ class StorageFallback {
       updatedAt: new Date(),
     });
 
-    // 2. Demo Property
-    const propertyId = 'prop_sunset_villa_001';
-    this.properties.set(propertyId, {
-      id: propertyId,
-      name: 'Sunset Villa Headquarters',
-      address: '742 Evergreen Terrace, Springfield',
-      armingState: ArmingState.DISARMED,
-      ownerId: null,
+    // 2. Demo Property Owner
+    // The demo property needs a real owner: only PROPERTY_OWNER accounts may arm
+    // or disarm it, and an ADMIN-only login would be refused by the access policy.
+    const ownerId = 'user_owner_001';
+    this.users.set(ownerId, {
+      id: ownerId,
+      email: 'owner@example.com',
+      name: 'SET Facilities Owner',
+      passwordHash: bcrypt.hashSync('owner123', 10),
+      role: Role.PROPERTY_OWNER,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    // 3. Zones
+    // 3. Demo Property
+    const propertyId = 'prop_sunset_villa_001';
+    this.properties.set(propertyId, {
+      id: propertyId,
+      name: 'School of Engineering and Technology (SET)',
+      address: 'School of Engineering and Technology, Great East Road Campus',
+      armingState: ArmingState.DISARMED,
+      ownerId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    this.propertyMembers.set(propertyId, new Set([ownerId, adminId]));
+
+    // 4. Zones
     const kitchenZoneId = 'zone_kitchen_001';
     this.zones.set(kitchenZoneId, {
       id: kitchenZoneId,
@@ -178,7 +193,7 @@ class StorageFallback {
       updatedAt: new Date(),
     });
 
-    // 4. Demo Device: ESP32_A1B2C3
+    // 5. Demo Device: ESP32_A1B2C3
     const deviceId = 'ESP32_A1B2C3';
     this.devices.set(deviceId, {
       id: deviceId,
