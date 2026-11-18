@@ -20,7 +20,7 @@ void main() {
   );
 
   final apiService = ApiService();
-  final realtimeService = RealtimeService(api: apiService);
+  final realtimeService = RealtimeService(apiService);
 
   runApp(PropertyRiskApp(
     apiService: apiService,
