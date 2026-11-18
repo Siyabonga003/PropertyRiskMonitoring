@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: mobile-ci-${{ github.ref }}
@@ -39,13 +40,38 @@ jobs:
 
       - name: Format check (report only)
         continue-on-error: true
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format --output=none --set-exit-if-changed lib test 2>&1 | tee format.log
 
       - name: Analyze
-        run: flutter analyze
+        id: analyze
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee analyze.log
 
       - name: Test
-        run: flutter test --reporter expanded
+        id: test
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          flutter test --reporter expanded 2>&1 | tee test.log
+
+      - name: Upload Dart logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dart-logs
+          path: |
+            mobile/analyze.log
+            mobile/test.log
+            mobile/format.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Fail if analyze or test failed
+        if: always() && (steps.analyze.outcome != 'success' || steps.test.outcome != 'success')
+        run: exit 1
 
   build-android:
     name: Build debug APK
@@ -77,13 +103,73 @@ jobs:
         run: flutter pub get
 
       - name: Build debug APK
-        run: flutter build apk --debug
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          flutter build apk --debug 2>&1 | tee build.log
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: mobile/build.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload APK
-        if: always()
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: mobile/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Fail if build failed
+        if: steps.build.outcome != 'success'
+        run: exit 1
+
+  report:
+    name: Publish results to pull request
+    needs: [analyze-and-test, build-android]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-logs'
+          path: ci-logs
+          merge-multiple: true
+
+      - name: Post results comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ANALYZE_RESULT: ${{ needs.analyze-and-test.result }}
+          BUILD_RESULT: ${{ needs.build-android.result }}
+        run: |
+          set -e
+          {
+            echo "<!-- mobile-ci-report -->"
+            echo "### Mobile CI results"
+            echo ""
+            echo "| Check | Result |"
+            echo "| :--- | :--- |"
+            echo "| Analyze and test | \`$ANALYZE_RESULT\` |"
+            echo "| Debug APK build | \`$BUILD_RESULT\` |"
+            for f in analyze.log test.log format.log build.log; do
+              [ -f "ci-logs/$f" ] || continue
+              echo ""
+              echo "<details><summary><code>$f</code> (last 150 lines)</summary>"
+              echo ""
+              echo '```'
+              tail -n 150 "ci-logs/$f"
+              echo '```'
+              echo ""
+              echo "</details>"
+            done
+          } > body.md
+          gh pr comment "$PR_NUMBER" --body-file body.md --edit-last --create-if-none
